@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apprentissage actif</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Apprentissage actif</h1>
+      <div class="header-actions">
+        <span id="current-user" class="muted"></span>
+        <button id="logout-btn" class="secondary">Se déconnecter</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="login-screen" class="view active">
+        <div class="card">
+          <h2>Bienvenue !</h2>
+          <p>Choisissez un pseudo pour commencer vos révisions actives.</p>
+          <form id="login-form" class="stack">
+            <label for="pseudo">Pseudo</label>
+            <input id="pseudo" name="pseudo" type="text" required minlength="3" maxlength="32" />
+            <button type="submit">Entrer</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="dashboard-screen" class="view hidden">
+        <div class="toolbar">
+          <h2>Mes cours</h2>
+          <form id="new-course-form" class="inline">
+            <input type="text" id="new-course-name" placeholder="Nom du cours" required />
+            <button type="submit">Créer</button>
+          </form>
+        </div>
+        <div id="courses-list" class="cards"></div>
+      </section>
+
+      <section id="course-screen" class="view hidden">
+        <div class="toolbar course-toolbar">
+          <button id="back-to-dashboard" class="secondary">Retour</button>
+          <div class="course-title-area">
+            <h2 id="course-title"></h2>
+            <button id="new-iteration-btn" class="secondary">Nouvelle itération</button>
+          </div>
+        </div>
+        <div class="course-layout">
+          <aside class="sidebar">
+            <div class="sidebar-header">
+              <h3>Structure</h3>
+              <button id="add-root-page" class="secondary">Ajouter un chapitre</button>
+            </div>
+            <form id="add-page-form" class="stack">
+              <label for="page-title-input">Titre</label>
+              <input id="page-title-input" type="text" required />
+              <label for="parent-select">Parent</label>
+              <select id="parent-select"></select>
+              <button type="submit">Ajouter une page</button>
+            </form>
+            <div id="pages-tree" class="tree"></div>
+          </aside>
+          <section class="content-area">
+            <div class="mode-switch">
+              <button id="editor-tab" class="tab active" data-target="editor-view">Éditeur</button>
+              <button id="revision-tab" class="tab" data-target="revision-view">Mode révision</button>
+            </div>
+            <div id="page-empty" class="empty-state">Sélectionnez une page pour commencer.</div>
+            <div id="editor-view" class="panel hidden">
+              <div class="editor-toolbar">
+                <button type="button" data-command="bold"><span>Gras</span></button>
+                <button type="button" data-command="italic"><span>Italique</span></button>
+                <button type="button" data-command="insertUnorderedList"><span>Liste</span></button>
+                <button type="button" data-command="formatBlock" data-value="h2"><span>Titre</span></button>
+                <button type="button" id="insert-image-btn"><span>Image</span></button>
+                <button type="button" id="create-cloze-btn"><span>Texte à trou</span></button>
+                <button type="button" id="remove-cloze-btn"><span>Retirer le trou</span></button>
+              </div>
+              <div id="editor" contenteditable="true" class="editor" aria-label="Éditeur de cours"></div>
+              <div class="editor-actions">
+                <button id="save-page-btn">Enregistrer</button>
+                <span id="save-status" class="muted"></span>
+              </div>
+            </div>
+            <div id="revision-view" class="panel hidden">
+              <div id="revision-content" class="revision"></div>
+              <p class="muted">Cliquez sur un trou pour révéler la réponse puis évaluez votre réussite.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
