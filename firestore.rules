@@ -1,0 +1,102 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function nonEmptyString(value, maxLen) {
+      return value is string && value.size() > 0 && value.size() <= maxLen;
+    }
+
+    function optionalString(value, maxLen) {
+      return value == null || (value is string && value.size() <= maxLen);
+    }
+
+    function isTimestamp(value) {
+      return value is timestamp;
+    }
+
+    function optionalTimestamp(value) {
+      return value == null || value is timestamp;
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasOnly(['name', 'description', 'createdAt', 'updatedAt']) &&
+             'name' in data && nonEmptyString(data.name, 120) &&
+             (!('description' in data) || optionalString(data.description, 2000)) &&
+             'createdAt' in data && isTimestamp(data.createdAt) &&
+             (!('updatedAt' in data) || optionalTimestamp(data.updatedAt));
+    }
+
+    function isValidClozeState(entry) {
+      return entry is map &&
+             entry.keys().hasOnly(['answer', 'counter', 'score']) &&
+             'answer' in entry && optionalString(entry.answer, 2000) &&
+             'counter' in entry && entry.counter is int && entry.counter >= 0 &&
+             'score' in entry && entry.score is number && entry.score >= 0;
+    }
+
+    function isValidClozeStates(mapValue) {
+      return mapValue is map && mapValue.values().all(entry => isValidClozeState(entry));
+    }
+
+    function isValidPage(data) {
+      return data.keys().hasOnly([
+               'title', 'parentId', 'order', 'contentHtml',
+               'clozeStates', 'createdAt', 'updatedAt'
+             ]) &&
+             'title' in data && nonEmptyString(data.title, 200) &&
+             'order' in data && data.order is number &&
+             'contentHtml' in data && data.contentHtml is string &&
+             'createdAt' in data && isTimestamp(data.createdAt) &&
+             (!('updatedAt' in data) || optionalTimestamp(data.updatedAt)) &&
+             (!('parentId' in data) ||
+               data.parentId == null ||
+               (data.parentId is string && data.parentId.size() <= 200)) &&
+             (!('clozeStates' in data) || isValidClozeStates(data.clozeStates));
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                    request.resource.data.keys().hasOnly(['createdAt']) &&
+                    isTimestamp(request.resource.data.createdAt);
+
+      allow delete: if isOwner(userId);
+      // Pas d’update attendu sur le document utilisateur.
+
+      match /courses/{courseId} {
+        allow read: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                      isValidCourse(request.resource.data);
+
+        allow update: if isOwner(userId) &&
+                      isValidCourse(request.resource.data) &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+
+        allow delete: if isOwner(userId);
+
+        match /pages/{pageId} {
+          allow read: if isOwner(userId);
+
+          allow create: if isOwner(userId) &&
+                        isValidPage(request.resource.data);
+
+          allow update: if isOwner(userId) &&
+                        isValidPage(request.resource.data) &&
+                        request.resource.data.createdAt == resource.data.createdAt;
+
+          allow delete: if isOwner(userId);
+        }
+      }
+    }
+  }
+}
