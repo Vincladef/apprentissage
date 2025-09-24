@@ -14,14 +14,15 @@ Application web de prise de notes et de révision active avec texte à trous et 
 ## Déploiement
 
 1. Hébergez les fichiers statiques (`index.html`, `styles.css`, `app.js`) sur GitHub Pages ou tout hébergeur statique.
-2. Activez l’authentification **Email/Mot de passe** dans Firebase Authentication. L’application génère une adresse du type `<pseudo>@pseudo.apprentissage` et un mot de passe dérivé pour chaque utilisateur.
-3. Mettez à jour la configuration Firebase et, si besoin, les constantes `AUTH_EMAIL_DOMAIN` / `AUTH_PASSWORD_SUFFIX` dans `app.js` ainsi que la règle `isOwner` de `firestore.rules` si vous changez le domaine.
+2. Dans la console Firebase, créez une application Web puis copiez les identifiants fournis (API key, Auth domain, Project ID…). Remplacez les valeurs du fichier `firebase-config.js` par celles de votre projet.
+3. Activez l’authentification **Email/Mot de passe** dans Firebase Authentication. L’application génère une adresse du type `<pseudo>@pseudo.apprentissage` et un mot de passe dérivé pour chaque utilisateur.
+4. Si besoin, ajustez les constantes `AUTH_EMAIL_DOMAIN` / `AUTH_PASSWORD_SUFFIX` dans `app.js` ainsi que la règle `isOwner` de `firestore.rules` si vous changez le domaine.
 
 > Les pseudos saisis sont normalisés (minuscules, accents supprimés et caractères non autorisés remplacés par `-`) afin de constituer un identifiant valide pour Firebase Authentication.
 
 ## Dépannage
 
-- **Erreur `FirebaseError: Firebase: Error (auth/configuration-not-found)` lors de la connexion** : la méthode de connexion *Email/Mot de passe* n’est pas activée pour votre projet Firebase. Rendez-vous dans la console Firebase > *Authentication* > *Méthode de connexion* et activez ce fournisseur, puis réessayez.
+- **Erreur `FirebaseError: Firebase: Error (auth/configuration-not-found)` lors de la connexion** : soit l’application pointe encore vers la configuration d’exemple (vérifiez que toutes les valeurs du fichier `firebase-config.js` ont été remplacées par celles de votre projet), soit la méthode de connexion *Email/Mot de passe* n’est pas activée dans la console Firebase (*Authentication* > *Méthode de connexion*).
 
 ## Développement local
 

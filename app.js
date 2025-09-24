@@ -24,16 +24,67 @@ import {
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import { firebaseConfig } from "./firebase-config.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCeI19b-aD4qNtSgue7STypajkd8mQZJNo",
-  authDomain: "apprentissage-55116.firebaseapp.com",
-  projectId: "apprentissage-55116",
-  storageBucket: "apprentissage-55116.firebasestorage.app",
-  messagingSenderId: "494031174520",
-  appId: "1:494031174520:web:3a878e5ec131da3ebaa68d",
-  measurementId: "G-LRFMSS2E1R"
-};
+const REQUIRED_FIREBASE_CONFIG_KEYS = [
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "storageBucket",
+  "messagingSenderId",
+  "appId"
+];
+
+function getFirebaseConfigError(config) {
+  if (!config || typeof config !== "object") {
+    return "Aucune configuration Firebase n'a été fournie. Copiez les identifiants Web de votre projet dans firebase-config.js.";
+  }
+
+  const placeholderPattern = /^__REPLACE_WITH_YOUR_FIREBASE_/;
+  const missingKey = REQUIRED_FIREBASE_CONFIG_KEYS.find((key) => {
+    const value = config[key];
+    return typeof value !== "string" || value.trim() === "" || placeholderPattern.test(value);
+  });
+
+  if (missingKey) {
+    return `La propriété \`${missingKey}\` doit être renseignée dans firebase-config.js avec les valeurs de votre projet.`;
+  }
+
+  return null;
+}
+
+function renderFirebaseConfigError(message) {
+  const loginScreen = document.getElementById("login-screen");
+  if (!loginScreen) {
+    console.error(message);
+    return;
+  }
+
+  loginScreen.innerHTML = "";
+  const card = document.createElement("div");
+  card.className = "card error";
+
+  const title = document.createElement("h2");
+  title.textContent = "Configuration Firebase requise";
+  card.appendChild(title);
+
+  const mainMessage = document.createElement("p");
+  mainMessage.textContent = message;
+  card.appendChild(mainMessage);
+
+  const instructions = document.createElement("p");
+  instructions.textContent =
+    "Ouvrez le fichier firebase-config.js et remplacez les valeurs par celles fournies dans la console Firebase (section Paramètres du projet > Vos applications).";
+  card.appendChild(instructions);
+
+  loginScreen.appendChild(card);
+}
+
+const firebaseConfigError = getFirebaseConfigError(firebaseConfig);
+if (firebaseConfigError) {
+  renderFirebaseConfigError(firebaseConfigError);
+  throw new Error(firebaseConfigError);
+}
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -245,7 +296,7 @@ function handleLoginSubmit(event) {
         case "auth/configuration-not-found":
         case "auth/operation-not-allowed":
           message =
-            "La connexion par e-mail/mot de passe n'est pas configurée pour ce projet Firebase. Activez la méthode 'Email/Mot de passe' dans Firebase Authentication.";
+            "La connexion par e-mail/mot de passe n'est pas configurée pour ce projet Firebase ou l'application pointe vers une configuration incomplète. Vérifiez votre fichier firebase-config.js puis activez la méthode 'Email/Mot de passe' dans Firebase Authentication.";
           break;
         case "auth/too-many-requests":
           message = "Trop de tentatives de connexion. Réessayez plus tard.";
