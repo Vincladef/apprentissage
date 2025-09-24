@@ -42,15 +42,65 @@ service cloud.firestore {
              'score' in entry && entry.score is number && entry.score >= 0;
     }
 
-    function areValidClozeStateValues(values, index) {
-      return index >= values.size() ||
-             (isValidClozeState(values[index]) &&
-              areValidClozeStateValues(values, index + 1));
+    function areValidClozeStateValues(values) {
+      let size = values.size();
+      // Firestore rules interdisent la récursion, on vérifie donc jusqu'à 50 entrées manuellement.
+      return size <= 50 &&
+             (size <= 0 || isValidClozeState(values[0])) &&
+             (size <= 1 || isValidClozeState(values[1])) &&
+             (size <= 2 || isValidClozeState(values[2])) &&
+             (size <= 3 || isValidClozeState(values[3])) &&
+             (size <= 4 || isValidClozeState(values[4])) &&
+             (size <= 5 || isValidClozeState(values[5])) &&
+             (size <= 6 || isValidClozeState(values[6])) &&
+             (size <= 7 || isValidClozeState(values[7])) &&
+             (size <= 8 || isValidClozeState(values[8])) &&
+             (size <= 9 || isValidClozeState(values[9])) &&
+             (size <= 10 || isValidClozeState(values[10])) &&
+             (size <= 11 || isValidClozeState(values[11])) &&
+             (size <= 12 || isValidClozeState(values[12])) &&
+             (size <= 13 || isValidClozeState(values[13])) &&
+             (size <= 14 || isValidClozeState(values[14])) &&
+             (size <= 15 || isValidClozeState(values[15])) &&
+             (size <= 16 || isValidClozeState(values[16])) &&
+             (size <= 17 || isValidClozeState(values[17])) &&
+             (size <= 18 || isValidClozeState(values[18])) &&
+             (size <= 19 || isValidClozeState(values[19])) &&
+             (size <= 20 || isValidClozeState(values[20])) &&
+             (size <= 21 || isValidClozeState(values[21])) &&
+             (size <= 22 || isValidClozeState(values[22])) &&
+             (size <= 23 || isValidClozeState(values[23])) &&
+             (size <= 24 || isValidClozeState(values[24])) &&
+             (size <= 25 || isValidClozeState(values[25])) &&
+             (size <= 26 || isValidClozeState(values[26])) &&
+             (size <= 27 || isValidClozeState(values[27])) &&
+             (size <= 28 || isValidClozeState(values[28])) &&
+             (size <= 29 || isValidClozeState(values[29])) &&
+             (size <= 30 || isValidClozeState(values[30])) &&
+             (size <= 31 || isValidClozeState(values[31])) &&
+             (size <= 32 || isValidClozeState(values[32])) &&
+             (size <= 33 || isValidClozeState(values[33])) &&
+             (size <= 34 || isValidClozeState(values[34])) &&
+             (size <= 35 || isValidClozeState(values[35])) &&
+             (size <= 36 || isValidClozeState(values[36])) &&
+             (size <= 37 || isValidClozeState(values[37])) &&
+             (size <= 38 || isValidClozeState(values[38])) &&
+             (size <= 39 || isValidClozeState(values[39])) &&
+             (size <= 40 || isValidClozeState(values[40])) &&
+             (size <= 41 || isValidClozeState(values[41])) &&
+             (size <= 42 || isValidClozeState(values[42])) &&
+             (size <= 43 || isValidClozeState(values[43])) &&
+             (size <= 44 || isValidClozeState(values[44])) &&
+             (size <= 45 || isValidClozeState(values[45])) &&
+             (size <= 46 || isValidClozeState(values[46])) &&
+             (size <= 47 || isValidClozeState(values[47])) &&
+             (size <= 48 || isValidClozeState(values[48])) &&
+             (size <= 49 || isValidClozeState(values[49]));
     }
 
     function isValidClozeStates(mapValue) {
       return mapValue is map &&
-             areValidClozeStateValues(mapValue.values(), 0);
+             areValidClozeStateValues(mapValue.values());
     }
 
     function isValidPage(data) {
