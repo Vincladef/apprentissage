@@ -42,9 +42,15 @@ service cloud.firestore {
              'score' in entry && entry.score is number && entry.score >= 0;
     }
 
+    function areValidClozeStateValues(values, index) {
+      return index >= values.size() ||
+             (isValidClozeState(values[index]) &&
+              areValidClozeStateValues(values, index + 1));
+    }
+
     function isValidClozeStates(mapValue) {
       return mapValue is map &&
-             mapValue.values().where(entry, !isValidClozeState(entry)).size() == 0;
+             areValidClozeStateValues(mapValue.values(), 0);
     }
 
     function isValidPage(data) {
