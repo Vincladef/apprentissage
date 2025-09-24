@@ -14,6 +14,16 @@ import {
   writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeI19b-aD4qNtSgue7STypajkd8mQZJNo",
@@ -27,9 +37,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+
+const AUTH_EMAIL_DOMAIN = "pseudo.apprentissage";
+const AUTH_PASSWORD_SUFFIX = "#appr";
+const MIN_PSEUDO_LENGTH = 3;
 
 const state = {
   pseudo: null,
+  displayName: null,
+  pendingDisplayName: null,
   coursesUnsubscribe: null,
   pagesUnsubscribe: null,
   courses: [],
@@ -49,6 +66,7 @@ const views = {
 const ui = {
   loginForm: document.getElementById("login-form"),
   pseudoInput: document.getElementById("pseudo"),
+  loginButton: document.querySelector("#login-form button[type='submit']"),
   currentUser: document.getElementById("current-user"),
   logoutBtn: document.getElementById("logout-btn"),
   newCourseForm: document.getElementById("new-course-form"),
@@ -106,6 +124,38 @@ function safeId() {
   return `cloze-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
+function normalizePseudoInput(rawPseudo = "") {
+  const trimmed = (rawPseudo || "").trim();
+  if (!trimmed) {
+    return { pseudoKey: "", displayName: "" };
+  }
+  const ascii = trimmed
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const lower = ascii.toLowerCase();
+  const safe = lower
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "");
+  return { pseudoKey: safe, displayName: trimmed };
+}
+
+function buildAuthEmail(pseudoKey) {
+  return `${pseudoKey}@${AUTH_EMAIL_DOMAIN}`;
+}
+
+function buildAuthPassword(pseudoKey) {
+  return `${pseudoKey}${AUTH_PASSWORD_SUFFIX}`;
+}
+
+function extractPseudoFromEmail(email = "") {
+  const suffix = `@${AUTH_EMAIL_DOMAIN}`;
+  if (!email || !email.endsWith(suffix)) {
+    return null;
+  }
+  return email.slice(0, -suffix.length);
+}
+
 function normalizeClozeStateEntry(entry = {}) {
   const answer = entry.answer ?? "";
   const rawScore = Number(entry.score ?? entry.counter ?? 0);
@@ -139,6 +189,8 @@ function resetState() {
     state.pagesUnsubscribe();
     state.pagesUnsubscribe = null;
   }
+  state.pseudo = null;
+  state.displayName = null;
   state.courses = [];
   state.pages = [];
   state.currentCourse = null;
@@ -151,6 +203,7 @@ function resetState() {
   ui.revisionContent.innerHTML = "";
   ui.courseTitle.textContent = "";
   ui.saveStatus.textContent = "";
+  ui.currentUser.textContent = "";
   togglePagePanels(false);
   ui.pageEmpty.classList.remove("hidden");
   ui.logoutBtn.disabled = true;
@@ -168,32 +221,135 @@ async function ensureUserExists(pseudo) {
 
 function handleLoginSubmit(event) {
   event.preventDefault();
-  const pseudo = ui.pseudoInput.value.trim();
-  if (!pseudo) {
+  const { pseudoKey, displayName } = normalizePseudoInput(ui.pseudoInput.value);
+  if (!pseudoKey || pseudoKey.length < MIN_PSEUDO_LENGTH) {
+    showToast(
+      `Pseudo invalide. Utilisez au moins ${MIN_PSEUDO_LENGTH} caractères autorisés (lettres, chiffres, . _ -).`,
+      "error"
+    );
     return;
   }
-  login(pseudo).catch((err) => {
-    console.error(err);
-    showToast("Impossible de se connecter", "error");
-  });
+  if (ui.loginButton) {
+    ui.loginButton.disabled = true;
+  }
+  ui.pseudoInput.disabled = true;
+  login(pseudoKey, displayName)
+    .catch((err) => {
+      console.error(err);
+      let message = "Impossible de se connecter";
+      switch (err?.code) {
+        case "auth/invalid-email":
+        case "auth/missing-email":
+          message = "Pseudo invalide. Vérifiez les caractères utilisés.";
+          break;
+        case "auth/too-many-requests":
+          message = "Trop de tentatives de connexion. Réessayez plus tard.";
+          break;
+        case "auth/network-request-failed":
+          message = "Connexion réseau requise pour accéder à votre compte.";
+          break;
+        case "auth/wrong-password":
+          message = "Ce pseudo est associé à un mot de passe différent. Contactez un administrateur.";
+          break;
+        default:
+          break;
+      }
+      showToast(message, "error");
+    })
+    .finally(() => {
+      if (ui.loginButton) {
+        ui.loginButton.disabled = false;
+      }
+      ui.pseudoInput.disabled = false;
+    });
 }
 
-async function login(pseudo) {
-  await ensureUserExists(pseudo);
-  state.pseudo = pseudo;
-  localStorage.setItem("pseudo", pseudo);
-  ui.currentUser.textContent = `Connecté en tant que ${pseudo}`;
+async function login(pseudoKey, displayName) {
+  state.pendingDisplayName = displayName;
+  const email = buildAuthEmail(pseudoKey);
+  const password = buildAuthPassword(pseudoKey);
+  try {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      if (error?.code === "auth/user-not-found") {
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        await ensureUserExists(pseudoKey);
+        if (credential.user && displayName) {
+          try {
+            await updateProfile(credential.user, { displayName });
+          } catch (profileError) {
+            console.warn("Impossible de mettre à jour le profil", profileError);
+          }
+        }
+      } else {
+        throw error;
+      }
+    }
+    const currentUser = auth.currentUser;
+    if (currentUser && displayName && currentUser.displayName !== displayName) {
+      try {
+        await updateProfile(currentUser, { displayName });
+      } catch (profileError) {
+        console.warn("Impossible de mettre à jour le profil", profileError);
+      }
+    }
+    await ensureUserExists(pseudoKey);
+  } catch (error) {
+    state.pendingDisplayName = null;
+    throw error;
+  }
+}
+
+async function handleAuthState(user) {
+  const pendingDisplayName = state.pendingDisplayName;
+  resetState();
+  if (!user) {
+    state.pendingDisplayName = null;
+    ui.loginForm.reset();
+    showView("login");
+    return;
+  }
+
+  const pseudoKey = extractPseudoFromEmail(user.email || "");
+  if (!pseudoKey) {
+    console.error("Utilisateur connecté avec une adresse e-mail inattendue", user.email);
+    state.pendingDisplayName = null;
+    showToast("Profil invalide détecté. Déconnexion en cours.", "error");
+    await signOut(auth);
+    return;
+  }
+
+  state.pseudo = pseudoKey;
+  const resolvedDisplayName = user.displayName || pendingDisplayName || pseudoKey;
+  state.displayName = resolvedDisplayName;
+  state.pendingDisplayName = null;
+  ui.currentUser.textContent = `Connecté en tant que ${resolvedDisplayName}`;
   ui.logoutBtn.disabled = false;
+  ui.loginForm.reset();
+
+  try {
+    await ensureUserExists(pseudoKey);
+  } catch (error) {
+    console.error("Impossible d'initialiser le profil Firestore", error);
+    showToast("Impossible de préparer votre compte", "error");
+    await signOut(auth);
+    return;
+  }
+
   subscribeToCourses();
   showView("dashboard");
 }
 
-function logout() {
-  localStorage.removeItem("pseudo");
-  ui.currentUser.textContent = "";
-  resetState();
-  state.pseudo = null;
-  showView("login");
+async function logout() {
+  ui.logoutBtn.disabled = true;
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error(error);
+    ui.logoutBtn.disabled = false;
+    showToast("Impossible de se déconnecter", "error");
+  }
 }
 
 function subscribeToCourses() {
@@ -946,16 +1102,18 @@ async function runIteration() {
   }
 }
 
-function restoreSession() {
-  const pseudo = localStorage.getItem("pseudo");
-  if (pseudo) {
-    login(pseudo).catch(() => {
-      localStorage.removeItem("pseudo");
-      showView("login");
-    });
-  } else {
-    showView("login");
+async function initAuth() {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (error) {
+    console.warn("Impossible de configurer la persistance de l'authentification", error);
   }
+  onAuthStateChanged(auth, (user) => {
+    handleAuthState(user).catch((err) => {
+      console.error("Erreur lors du traitement de l'état d'authentification", err);
+      showToast("Erreur d'authentification", "error");
+    });
+  });
 }
 
 function initEvents() {
@@ -991,4 +1149,4 @@ function initEvents() {
 }
 
 initEvents();
-restoreSession();
+initAuth();
