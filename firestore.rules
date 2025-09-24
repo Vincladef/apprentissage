@@ -7,7 +7,8 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      // Les comptes utilisent une adresse générée de la forme <pseudo>@pseudo.apprentissage (cf. app.js).
+      return isSignedIn() && request.auth.token.email == userId + '@pseudo.apprentissage';
     }
 
     function nonEmptyString(value, maxLen) {

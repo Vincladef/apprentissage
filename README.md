@@ -4,7 +4,7 @@ Application web de prise de notes et de révision active avec texte à trous et 
 
 ## Fonctionnalités
 
-- Connexion par pseudo (sans mot de passe) avec conservation automatique de la session.
+- Connexion par pseudo (via Firebase Authentication) avec création automatique du compte.
 - Gestion multi-cours : création, ouverture et suppression de cours.
 - Arborescence chapitres/pages/sous-pages avec ajout, renommage et suppression.
 - Éditeur riche simple (gras, italique, listes, titres, insertion d’images) et transformation de portions de texte en trous à réviser.
@@ -14,8 +14,10 @@ Application web de prise de notes et de révision active avec texte à trous et 
 ## Déploiement
 
 1. Hébergez les fichiers statiques (`index.html`, `styles.css`, `app.js`) sur GitHub Pages ou tout hébergeur statique.
-2. Configurez votre projet Firebase Firestore avec des règles adaptées à un usage sans authentification (ou ajoutez votre propre stratégie d’authentification).
-3. Mettez à jour la configuration Firebase dans `app.js` si nécessaire.
+2. Activez l’authentification **Email/Mot de passe** dans Firebase Authentication. L’application génère une adresse du type `<pseudo>@pseudo.apprentissage` et un mot de passe dérivé pour chaque utilisateur.
+3. Mettez à jour la configuration Firebase et, si besoin, les constantes `AUTH_EMAIL_DOMAIN` / `AUTH_PASSWORD_SUFFIX` dans `app.js` ainsi que la règle `isOwner` de `firestore.rules` si vous changez le domaine.
+
+> Les pseudos saisis sont normalisés (minuscules, accents supprimés et caractères non autorisés remplacés par `-`) afin de constituer un identifiant valide pour Firebase Authentication.
 
 ## Développement local
 
