@@ -328,18 +328,29 @@ function bootstrapApp() {
     const email = buildAuthEmail(pseudoKey);
     const password = buildAuthPassword(pseudoKey);
     try {
+      let credential = null;
       try {
-        await signInWithEmailAndPassword(auth, email, password);
+        credential = await signInWithEmailAndPassword(auth, email, password);
       } catch (error) {
-        if (error?.code === "auth/user-not-found") {
-          const credential = await createUserWithEmailAndPassword(auth, email, password);
-          await ensureUserExists(pseudoKey);
-          if (credential.user && displayName) {
-            try {
-              await updateProfile(credential.user, { displayName });
-            } catch (profileError) {
-              console.warn("Impossible de mettre à jour le profil", profileError);
+        if (error?.code === "auth/user-not-found" || error?.code === "auth/invalid-credential") {
+          try {
+            credential = await createUserWithEmailAndPassword(auth, email, password);
+            if (credential.user && displayName) {
+              try {
+                await updateProfile(credential.user, { displayName });
+              } catch (profileError) {
+                console.warn("Impossible de mettre à jour le profil", profileError);
+              }
             }
+          } catch (createError) {
+            if (createError?.code === "auth/email-already-in-use") {
+              const wrongPasswordError = new Error(
+                "Ce pseudo est associé à un mot de passe différent. Contactez un administrateur."
+              );
+              wrongPasswordError.code = "auth/wrong-password";
+              throw wrongPasswordError;
+            }
+            throw createError;
           }
         } else {
           throw error;
