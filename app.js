@@ -106,6 +106,30 @@ function safeId() {
   return `cloze-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
+function normalizeClozeStateEntry(entry = {}) {
+  const answer = entry.answer ?? "";
+  const rawScore = Number(entry.score ?? entry.counter ?? 0);
+  const score = Math.max(0, Number.isFinite(rawScore) ? Number(rawScore.toFixed(2)) : 0);
+  const fallbackCounter = Math.max(0, Math.floor(score));
+  const rawCounter = Number(entry.counter ?? fallbackCounter);
+  const counter = Number.isFinite(rawCounter)
+    ? Math.max(0, Math.min(fallbackCounter, Math.floor(rawCounter)))
+    : fallbackCounter;
+  return {
+    answer,
+    counter,
+    score
+  };
+}
+
+function normalizeClozeStates(states = {}) {
+  const normalized = {};
+  Object.entries(states).forEach(([key, value]) => {
+    normalized[key] = normalizeClozeStateEntry({ ...value });
+  });
+  return normalized;
+}
+
 function resetState() {
   if (state.coursesUnsubscribe) {
     state.coursesUnsubscribe();
@@ -288,14 +312,24 @@ function subscribeToPages() {
     state.pagesUnsubscribe();
   }
   state.pagesUnsubscribe = onSnapshot(q, (snapshot) => {
-    state.pages = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    state.pages = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        clozeStates: normalizeClozeStates(data.clozeStates || {})
+      };
+    });
     renderPagesTree();
     updateParentOptions();
     if (state.currentPage) {
       const fresh = state.pages.find((page) => page.id === state.currentPage.id);
       if (fresh) {
-        state.currentPage = fresh;
-        loadPageIntoEditor(fresh);
+        state.currentPage = {
+          ...fresh,
+          clozeStates: normalizeClozeStates(fresh.clozeStates || {})
+        };
+        loadPageIntoEditor(state.currentPage);
       } else {
         state.currentPage = null;
         ui.editor.innerHTML = "";
@@ -412,8 +446,11 @@ function renderPagesTree() {
 }
 
 function selectPage(page) {
-  state.currentPage = page;
-  loadPageIntoEditor(page);
+  state.currentPage = {
+    ...page,
+    clozeStates: normalizeClozeStates(page.clozeStates || {})
+  };
+  loadPageIntoEditor(state.currentPage);
   switchToTab(ui.editorTab.classList.contains("active") ? "editor" : "revision");
 }
 
@@ -426,7 +463,13 @@ function loadPageIntoEditor(page) {
   ui.pageEmpty.classList.add("hidden");
   togglePagePanels(true);
   ui.editor.innerHTML = page.contentHtml || "";
-  state.currentClozeStates = page.clozeStates || {};
+  const normalizedStates = normalizeClozeStates(page.clozeStates || {});
+  state.currentClozeStates = normalizedStates;
+  state.currentPage = {
+    ...(state.currentPage || {}),
+    ...page,
+    clozeStates: normalizedStates
+  };
   state.revisionHandlers.clear();
   ui.revisionContent.innerHTML = "";
   ui.saveStatus.textContent = "";
@@ -611,6 +654,7 @@ function createCloze() {
   span.dataset.id = id;
   span.dataset.answer = text;
   span.dataset.counter = "0";
+  span.dataset.score = "0";
   span.textContent = text;
   range.deleteContents();
   range.insertNode(span);
@@ -662,17 +706,28 @@ function updateClozeStatesFromEditor() {
       id = safeId();
       span.dataset.id = id;
     }
-    const previous = state.currentClozeStates[id];
+    const previous = normalizeClozeStateEntry(state.currentClozeStates[id] || {});
     const answer = span.textContent;
-    const counter = previous ? Number(previous.counter || 0) : Number(span.dataset.counter || 0);
+    const score = previous.score;
+    const fallbackCounter = Math.max(0, Math.floor(score));
+    const rawCounter = previous.counter ?? Number(span.dataset.counter || fallbackCounter);
+    const counter = Math.max(0, Math.min(fallbackCounter, Number(rawCounter || 0)));
     span.dataset.answer = answer;
     span.dataset.counter = String(counter);
+    span.dataset.score = String(score);
     updated[id] = {
       answer,
-      counter
+      counter,
+      score
     };
   });
-  state.currentClozeStates = updated;
+  state.currentClozeStates = normalizeClozeStates(updated);
+  if (state.currentPage) {
+    state.currentPage = {
+      ...state.currentPage,
+      clozeStates: state.currentClozeStates
+    };
+  }
 }
 
 async function savePage() {
@@ -681,19 +736,24 @@ async function savePage() {
   ui.saveButton.disabled = true;
   ui.saveStatus.textContent = "Enregistrement...";
   try {
+    const normalizedStates = normalizeClozeStates(state.currentClozeStates);
     await updateDoc(doc(db, "users", state.pseudo, "courses", state.currentCourse.id, "pages", state.currentPage.id), {
       contentHtml: ui.editor.innerHTML,
-      clozeStates: state.currentClozeStates,
+      clozeStates: normalizedStates,
       updatedAt: serverTimestamp()
     });
     state.currentPage = {
       ...state.currentPage,
       contentHtml: ui.editor.innerHTML,
-      clozeStates: state.currentClozeStates
+      clozeStates: normalizedStates
     };
     state.pages = state.pages.map((page) =>
       page.id === state.currentPage.id
-        ? { ...page, contentHtml: state.currentPage.contentHtml, clozeStates: state.currentPage.clozeStates }
+        ? {
+            ...page,
+            contentHtml: state.currentPage.contentHtml,
+            clozeStates: normalizeClozeStates(state.currentPage.clozeStates)
+          }
         : page
     );
     renderRevisionView();
@@ -721,9 +781,12 @@ function renderRevisionView() {
   const spans = ui.revisionContent.querySelectorAll("span.cloze");
   spans.forEach((span) => {
     const id = span.dataset.id;
-    const stateData = (state.currentPage.clozeStates || {})[id] || { answer: span.textContent, counter: 0 };
+    const stateData = normalizeClozeStateEntry(
+      (state.currentPage.clozeStates || {})[id] || { answer: span.textContent }
+    );
     span.dataset.answer = stateData.answer;
     span.dataset.counter = stateData.counter;
+    span.dataset.score = stateData.score;
     span.textContent = stateData.answer;
     span.classList.remove("needs-review");
     span.dataset.reviewed = "false";
@@ -777,16 +840,20 @@ function createRatingPanel(id, span) {
 async function rateCloze(id, option, panel, span) {
   if (!state.currentPage || !state.currentCourse || !state.pseudo) return;
   const pageRef = doc(db, "users", state.pseudo, "courses", state.currentCourse.id, "pages", state.currentPage.id);
-  const current = (state.currentPage.clozeStates || {})[id] || { answer: span.dataset.answer || "", counter: 0 };
-  let newCounter;
-  if (option.reset) {
-    newCounter = 0;
-  } else {
-    newCounter = Number((Number(current.counter || 0) + option.delta).toFixed(2));
-  }
+  const current = normalizeClozeStateEntry(
+    (state.currentPage.clozeStates || {})[id] || { answer: span.dataset.answer || "" }
+  );
+  const baseScore = option.reset ? 0 : Math.max(0, Number(current.score || 0));
+  const newScore = option.reset
+    ? 0
+    : Number((baseScore + option.delta).toFixed(2));
+  const newCounter = option.reset
+    ? 0
+    : Math.max(0, Math.floor(newScore));
   const newState = {
     answer: current.answer,
-    counter: newCounter
+    counter: newCounter,
+    score: newScore
   };
   try {
     await updateDoc(pageRef, {
@@ -800,10 +867,14 @@ async function rateCloze(id, option, panel, span) {
       ...state.currentClozeStates,
       [id]: newState
     };
+    state.currentPage.clozeStates = normalizeClozeStates(state.currentClozeStates);
     state.pages = state.pages.map((page) =>
-      page.id === state.currentPage.id ? { ...page, clozeStates: state.currentPage.clozeStates } : page
+      page.id === state.currentPage.id
+        ? { ...page, clozeStates: normalizeClozeStates(state.currentPage.clozeStates) }
+        : page
     );
     span.dataset.counter = newCounter;
+    span.dataset.score = newScore;
     panel.remove();
     showToast("Réponse enregistrée", "success");
   } catch (error) {
@@ -825,10 +896,14 @@ async function runIteration() {
       if (!data.clozeStates) return;
       const updated = {};
       Object.entries(data.clozeStates).forEach(([key, value]) => {
-        const counter = Math.max(0, Number((value?.counter ?? 0) - 1));
+        const normalized = normalizeClozeStateEntry(value || {});
+        const decremented = Math.max(0, Number((normalized.counter ?? 0) - 1));
+        const maxCounter = Math.max(0, Math.floor(normalized.score));
+        const counter = Math.min(maxCounter, decremented);
         updated[key] = {
-          answer: value?.answer ?? "",
-          counter
+          answer: normalized.answer,
+          counter,
+          score: normalized.score
         };
       });
       batch.update(docSnap.ref, { clozeStates: updated });
@@ -837,23 +912,29 @@ async function runIteration() {
     if (state.currentPage) {
       const updated = {};
       Object.entries(state.currentPage.clozeStates || {}).forEach(([key, value]) => {
+        const normalized = normalizeClozeStateEntry(value || {});
+        const decremented = Math.max(0, Number((normalized.counter ?? 0) - 1));
+        const maxCounter = Math.max(0, Math.floor(normalized.score));
         updated[key] = {
-          answer: value?.answer ?? "",
-          counter: Math.max(0, Number((value?.counter ?? 0) - 1))
+          answer: normalized.answer,
+          counter: Math.min(maxCounter, decremented),
+          score: normalized.score
         };
       });
+      const normalizedCurrent = normalizeClozeStates(updated);
       state.currentPage = {
         ...state.currentPage,
-        clozeStates: updated
+        clozeStates: normalizedCurrent
       };
-      state.currentClozeStates = updated;
+      state.currentClozeStates = normalizedCurrent;
       state.pages = state.pages.map((page) =>
-        page.id === state.currentPage.id ? { ...page, clozeStates: updated } : page
+        page.id === state.currentPage.id ? { ...page, clozeStates: normalizedCurrent } : page
       );
       ui.editor.querySelectorAll("span.cloze").forEach((span) => {
-        const data = updated[span.dataset.id];
+        const data = normalizedCurrent[span.dataset.id];
         if (data) {
           span.dataset.counter = String(data.counter);
+          span.dataset.score = String(data.score);
         }
       });
       renderRevisionView();
