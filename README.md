@@ -19,6 +19,10 @@ Application web de prise de notes et de révision active avec texte à trous et 
 
 > Les pseudos saisis sont normalisés (minuscules, accents supprimés et caractères non autorisés remplacés par `-`) afin de constituer un identifiant valide pour Firebase Authentication.
 
+## Dépannage
+
+- **Erreur `FirebaseError: Firebase: Error (auth/configuration-not-found)` lors de la connexion** : la méthode de connexion *Email/Mot de passe* n’est pas activée pour votre projet Firebase. Rendez-vous dans la console Firebase > *Authentication* > *Méthode de connexion* et activez ce fournisseur, puis réessayez.
+
 ## Développement local
 
 Servez les fichiers statiques via un serveur HTTP (par exemple `npx serve`) afin de bénéficier des modules ES.

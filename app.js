@@ -242,6 +242,11 @@ function handleLoginSubmit(event) {
         case "auth/missing-email":
           message = "Pseudo invalide. Vérifiez les caractères utilisés.";
           break;
+        case "auth/configuration-not-found":
+        case "auth/operation-not-allowed":
+          message =
+            "La connexion par e-mail/mot de passe n'est pas configurée pour ce projet Firebase. Activez la méthode 'Email/Mot de passe' dans Firebase Authentication.";
+          break;
         case "auth/too-many-requests":
           message = "Trop de tentatives de connexion. Réessayez plus tard.";
           break;
