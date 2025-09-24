@@ -43,7 +43,7 @@ service cloud.firestore {
     }
 
     function isValidClozeStates(mapValue) {
-      return mapValue is map && mapValue.values().all(entry => isValidClozeState(entry));
+      return mapValue is map && mapValue.values().all(entry, isValidClozeState(entry));
     }
 
     function isValidPage(data) {
