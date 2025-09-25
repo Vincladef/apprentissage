@@ -20,7 +20,19 @@
       </div>
       <div class="header-actions">
         <span id="current-user" class="muted"></span>
-        <button id="logout-btn" class="secondary">Se déconnecter</button>
+        <button
+          type="button"
+          id="workspace-menu-btn"
+          class="header-menu-toggle"
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-label="Ouvrir le menu principal"
+        >
+          ⋮
+        </button>
+        <div id="workspace-menu" class="header-menu" role="menu">
+          <button id="logout-btn" class="menu-item" role="menuitem">Se déconnecter</button>
+        </div>
       </div>
     </header>
 
@@ -51,13 +63,24 @@
 
       <section id="workspace" class="view hidden">
         <div class="workspace">
-          <aside class="note-list">
+          <aside class="note-list" aria-label="Mes fiches">
             <div class="note-list-header">
-              <div>
+              <div class="note-list-title">
                 <h2>Mes fiches</h2>
                 <p class="muted small">Tout est enregistré automatiquement.</p>
               </div>
-              <button id="add-note-btn">Nouvelle fiche</button>
+              <div class="note-list-actions">
+                <button
+                  type="button"
+                  id="toggle-sidebar"
+                  class="icon-button ghost"
+                  aria-expanded="true"
+                  aria-label="Réduire la liste des fiches"
+                >
+                  <span aria-hidden="true">⟷</span>
+                </button>
+                <button id="add-note-btn" type="button">Nouvelle fiche</button>
+              </div>
             </div>
             <div id="notes-container" class="notes-container"></div>
           </aside>
@@ -193,6 +216,36 @@
               </div>
             </div>
           </section>
+        </div>
+        <div id="drawer-overlay" class="drawer-overlay" hidden></div>
+        <div class="floating-actions" aria-live="polite">
+          <button
+            type="button"
+            id="mobile-notes-btn"
+            class="floating-action notes"
+            aria-label="Afficher les fiches"
+            aria-pressed="false"
+          >
+            📑
+          </button>
+          <button
+            type="button"
+            id="toggle-focus-btn"
+            class="floating-action focus"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">⤢</span>
+            <span class="sr-only">Activer le mode focus</span>
+          </button>
+          <button
+            type="button"
+            id="show-toolbar-btn"
+            class="floating-action toolbar"
+            aria-pressed="false"
+          >
+            A
+            <span class="sr-only">Afficher la barre d'outils</span>
+          </button>
         </div>
       </section>
     </main>
