@@ -129,6 +129,19 @@ function bootstrapApp() {
       toastType: "error"
     }
   };
+  const CLOZE_FEEDBACK_STATUS_DATASET_KEY = "feedbackStatus";
+  const CLOZE_FEEDBACK_STATUS_CLASSES = {
+    yes: "cloze-status-positive",
+    "rather-yes": "cloze-status-positive",
+    neutral: "cloze-status-neutral",
+    "rather-no": "cloze-status-negative",
+    no: "cloze-status-negative"
+  };
+  const CLOZE_STATUS_CLASS_VALUES = [
+    "cloze-status-positive",
+    "cloze-status-neutral",
+    "cloze-status-negative"
+  ];
   const CLOZE_DEFER_DATA_KEY = "deferMask";
   const CLOZE_MANUAL_REVEAL_SET_KEY = "revealedClozes";
   const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
@@ -300,6 +313,7 @@ function bootstrapApp() {
       setToolbarVisibility(false);
       if (!document.body.classList.contains("focus-mode") && ui.focusToggle) {
         ui.focusToggle.setAttribute("aria-pressed", "false");
+        ui.focusToggle.setAttribute("aria-label", "Activer le mode focus");
         const focusLabel = ui.focusToggle.querySelector(".sr-only");
         if (focusLabel) {
           focusLabel.textContent = "Activer le mode focus";
@@ -315,6 +329,7 @@ function bootstrapApp() {
       setNotesDrawer(false);
       if (!document.body.classList.contains("show-toolbar") && ui.toolbarToggle) {
         ui.toolbarToggle.setAttribute("aria-pressed", "false");
+        ui.toolbarToggle.setAttribute("aria-label", "Afficher la barre d'outils");
         const toolbarLabel = ui.toolbarToggle.querySelector(".sr-only");
         if (toolbarLabel) {
           toolbarLabel.textContent = "Afficher la barre d'outils";
@@ -374,6 +389,10 @@ function bootstrapApp() {
           ? "Désactiver le mode focus"
           : "Activer le mode focus";
       }
+      ui.focusToggle.setAttribute(
+        "aria-label",
+        shouldEnable ? "Désactiver le mode focus" : "Activer le mode focus"
+      );
       const icon = ui.focusToggle.querySelector("[aria-hidden='true']");
       if (icon) {
         icon.textContent = shouldEnable ? "⤡" : "⤢";
@@ -396,6 +415,10 @@ function bootstrapApp() {
           ? "Masquer la barre d'outils"
           : "Afficher la barre d'outils";
       }
+      ui.toolbarToggle.setAttribute(
+        "aria-label",
+        shouldShow ? "Masquer la barre d'outils" : "Afficher la barre d'outils"
+      );
     }
   }
 
@@ -1050,6 +1073,19 @@ function bootstrapApp() {
     }
   }
 
+  function updateClozeFeedbackStyle(cloze) {
+    if (!cloze) return;
+    CLOZE_STATUS_CLASS_VALUES.forEach((className) => {
+      cloze.classList.remove(className);
+    });
+    const status = cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY];
+    if (!status) return;
+    const className = CLOZE_FEEDBACK_STATUS_CLASSES[status];
+    if (className) {
+      cloze.classList.add(className);
+    }
+  }
+
   function refreshClozeElement(cloze) {
     if (!cloze) return;
     if (!cloze.dataset.placeholder) {
@@ -1061,6 +1097,7 @@ function bootstrapApp() {
     } else {
       cloze.removeAttribute("contenteditable");
     }
+    updateClozeFeedbackStyle(cloze);
   }
 
   function refreshAllClozes() {
@@ -1125,6 +1162,10 @@ function bootstrapApp() {
 
     clozes.forEach((cloze) => {
       delete cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
+      if (cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY]) {
+        delete cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY];
+      }
+      updateClozeFeedbackStyle(cloze);
       const hadDeferred = cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1";
       if (hadDeferred) {
         delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
@@ -1301,6 +1342,11 @@ function bootstrapApp() {
     const newPoints = feedback.reset ? 0 : currentPoints + (feedback.delta || 0);
     if (feedback.reset && cloze.dataset[CLOZE_DEFER_DATA_KEY]) {
       delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
+    }
+    if (feedbackKey && CLOZE_FEEDBACK_STATUS_CLASSES[feedbackKey]) {
+      cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY] = feedbackKey;
+    } else {
+      delete cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY];
     }
     const appliedPoints = setClozePoints(cloze, newPoints);
     refreshClozeElement(cloze);
