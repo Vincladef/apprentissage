@@ -104,13 +104,37 @@
 
             <div id="editor-wrapper" class="editor-wrapper hidden" aria-live="polite">
               <div class="editor-header">
-                <input
-                  id="note-title"
-                  type="text"
-                  placeholder="Titre de la fiche"
-                  aria-label="Titre de la fiche"
-                />
-                <span id="save-status" class="save-status muted"></span>
+                <div class="editor-header-main">
+                  <input
+                    id="note-title"
+                    type="text"
+                    placeholder="Titre de la fiche"
+                    aria-label="Titre de la fiche"
+                  />
+                  <span id="save-status" class="save-status muted"></span>
+                </div>
+                <div class="editor-header-actions">
+                  <button
+                    type="button"
+                    id="toggle-focus-btn"
+                    class="icon-button ghost"
+                    aria-pressed="false"
+                    aria-label="Activer le mode focus"
+                  >
+                    <span aria-hidden="true">⤢</span>
+                    <span class="sr-only">Activer le mode focus</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="show-toolbar-btn"
+                    class="icon-button ghost mobile-only"
+                    aria-pressed="false"
+                    aria-label="Afficher la barre d'outils"
+                  >
+                    <span aria-hidden="true">☰</span>
+                    <span class="sr-only">Afficher la barre d'outils</span>
+                  </button>
+                </div>
               </div>
               <div class="editor-toolbar" aria-label="Outils de mise en forme">
                 <div class="toolbar-group toolbar-group--primary">
