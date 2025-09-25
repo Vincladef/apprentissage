@@ -97,7 +97,11 @@ function bootstrapApp() {
   const MIN_PSEUDO_LENGTH = 3;
   const SAVE_DEBOUNCE_MS = 700;
   const HIGHLIGHT_COLOR = "#fde68a";
-  const CLOZE_PLACEHOLDER_CHAR = "▢";
+  const DEFAULT_TEXT_COLOR = "#1f2937";
+  const DEFAULT_FONT_FAMILY = "Arial";
+  const FONT_SIZE_STEPS = [10, 11, 12, 14, 18, 24, 32];
+  const DEFAULT_FONT_SIZE_INDEX = 1;
+  const CLOZE_PLACEHOLDER_TEXT = "Réponse";
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -119,7 +123,9 @@ function bootstrapApp() {
     pendingSave: null,
     hasUnsavedChanges: false,
     lastSavedAt: null,
-    clozeHidden: false
+    clozeHidden: false,
+    fontSizeIndex: DEFAULT_FONT_SIZE_INDEX,
+    activeCloze: null
   };
 
   const views = {
@@ -142,11 +148,22 @@ function bootstrapApp() {
     emptyState: document.getElementById("empty-note"),
     toast: document.getElementById("toast"),
     toolbar: document.querySelector(".editor-toolbar"),
-    toggleClozeBtn: document.getElementById("toggle-cloze-btn")
+    toggleClozeBtn: document.getElementById("toggle-cloze-btn"),
+    blockFormat: document.getElementById("block-format"),
+    fontFamily: document.getElementById("font-family"),
+    fontSizeValue: document.getElementById("font-size-value"),
+    clozeFeedback: document.getElementById("cloze-feedback")
   };
 
   ui.logoutBtn.disabled = true;
   updateClozeToggleButton();
+  updateFontSizeDisplay();
+  if (ui.fontFamily) {
+    ui.fontFamily.value = DEFAULT_FONT_FAMILY;
+  }
+  if (ui.blockFormat) {
+    ui.blockFormat.value = "p";
+  }
 
   function showView(name) {
     Object.entries(views).forEach(([key, section]) => {
@@ -275,11 +292,22 @@ function bootstrapApp() {
   }
 
   function showEmptyEditor() {
+    hideClozeFeedback();
     ui.editorWrapper.classList.add("hidden");
     ui.emptyState.classList.remove("hidden");
     ui.noteTitle.value = "";
     ui.noteEditor.innerHTML = "";
     ui.noteEditor.classList.remove("cloze-hidden");
+    state.clozeHidden = false;
+    state.fontSizeIndex = DEFAULT_FONT_SIZE_INDEX;
+    if (ui.blockFormat) {
+      ui.blockFormat.value = "p";
+    }
+    if (ui.fontFamily) {
+      ui.fontFamily.value = DEFAULT_FONT_FAMILY;
+    }
+    updateClozeToggleButton();
+    updateFontSizeDisplay();
     updateSaveStatus();
   }
 
@@ -289,6 +317,7 @@ function bootstrapApp() {
       showEmptyEditor();
       return;
     }
+    hideClozeFeedback();
     ui.emptyState.classList.add("hidden");
     ui.editorWrapper.classList.remove("hidden");
     const desiredTitle = state.currentNote.title || "";
@@ -316,6 +345,7 @@ function bootstrapApp() {
     }
     ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
     updateClozeToggleButton();
+    updateFontSizeDisplay();
   }
 
   function updateActiveNoteHighlight() {
@@ -617,11 +647,8 @@ function bootstrapApp() {
     handleEditorInput();
   }
 
-  function generateClozePlaceholder(rawText) {
-    const condensed = (rawText || "").replace(/\s+/g, "").trim();
-    if (!condensed) return "…";
-    const length = Math.max(3, Math.min(condensed.length, 12));
-    return CLOZE_PLACEHOLDER_CHAR.repeat(length);
+  function generateClozePlaceholder() {
+    return CLOZE_PLACEHOLDER_TEXT;
   }
 
   function createClozeFromSelection() {
@@ -642,7 +669,7 @@ function bootstrapApp() {
 
     const wrapper = document.createElement("span");
     wrapper.className = "cloze";
-    const placeholder = generateClozePlaceholder(range.toString());
+    const placeholder = generateClozePlaceholder();
     wrapper.dataset.placeholder = placeholder;
 
     const fragment = range.extractContents();
@@ -655,6 +682,7 @@ function bootstrapApp() {
   }
 
   function toggleClozeVisibility() {
+    hideClozeFeedback();
     state.clozeHidden = !state.clozeHidden;
     ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
     updateClozeToggleButton();
@@ -663,10 +691,144 @@ function bootstrapApp() {
 
   function updateClozeToggleButton() {
     if (!ui.toggleClozeBtn) return;
+    const labelText = state.clozeHidden ? "Afficher les trous" : "Masquer les trous";
     ui.toggleClozeBtn.setAttribute("aria-pressed", state.clozeHidden ? "true" : "false");
-    const label = ui.toggleClozeBtn.querySelector("span");
-    if (!label) return;
-    label.textContent = state.clozeHidden ? "Afficher les trous" : "Masquer les trous";
+    ui.toggleClozeBtn.setAttribute("aria-label", labelText);
+    ui.toggleClozeBtn.setAttribute("title", labelText);
+    const srLabel = ui.toggleClozeBtn.querySelector(".sr-only");
+    if (srLabel) {
+      srLabel.textContent = labelText;
+    }
+  }
+
+  function getCurrentFontSize() {
+    return FONT_SIZE_STEPS[state.fontSizeIndex] || FONT_SIZE_STEPS[DEFAULT_FONT_SIZE_INDEX];
+  }
+
+  function updateFontSizeDisplay() {
+    if (ui.fontSizeValue) {
+      ui.fontSizeValue.textContent = getCurrentFontSize();
+    }
+  }
+
+  function applyFontSize(size) {
+    if (!size || !ui.noteEditor) return;
+    document.execCommand("fontSize", false, "7");
+    const fonts = ui.noteEditor.querySelectorAll('font[size="7"]');
+    fonts.forEach((font) => {
+      const span = document.createElement("span");
+      span.style.fontSize = `${size}pt`;
+      while (font.firstChild) {
+        span.appendChild(font.firstChild);
+      }
+      font.replaceWith(span);
+    });
+    handleEditorInput();
+  }
+
+  function adjustFontSize(delta) {
+    const newIndex = Math.min(Math.max(state.fontSizeIndex + delta, 0), FONT_SIZE_STEPS.length - 1);
+    if (newIndex === state.fontSizeIndex) return;
+    state.fontSizeIndex = newIndex;
+    applyFontSize(getCurrentFontSize());
+    updateFontSizeDisplay();
+  }
+
+  function applyTextColor(color) {
+    const value = typeof color === "string" && color.trim() ? color : DEFAULT_TEXT_COLOR;
+    document.execCommand("foreColor", false, value);
+    handleEditorInput();
+  }
+
+  function clearActiveCloze() {
+    if (state.activeCloze) {
+      state.activeCloze.classList.remove("cloze-revealed");
+      state.activeCloze = null;
+    }
+  }
+
+  function hideClozeFeedback() {
+    if (ui.clozeFeedback) {
+      ui.clozeFeedback.classList.add("hidden");
+      ui.clozeFeedback.style.top = "";
+      ui.clozeFeedback.style.left = "";
+    }
+    clearActiveCloze();
+  }
+
+  function positionClozeFeedback(target) {
+    if (!ui.clozeFeedback || !target) return;
+    const wrapperRect = ui.editorWrapper.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const top = targetRect.bottom - wrapperRect.top + 8;
+    const center = targetRect.left - wrapperRect.left + targetRect.width / 2;
+    const feedbackRect = ui.clozeFeedback.getBoundingClientRect();
+    const halfWidth = feedbackRect.width / 2 || 0;
+    const margin = 16;
+    const minLeft = halfWidth + margin;
+    const maxLeft = Math.max(minLeft, wrapperRect.width - margin - halfWidth);
+    const left = Math.max(minLeft, Math.min(center, maxLeft));
+    ui.clozeFeedback.style.top = `${top}px`;
+    ui.clozeFeedback.style.left = `${left}px`;
+  }
+
+  function showClozeFeedback(target) {
+    if (!ui.clozeFeedback || !target) return;
+    state.activeCloze = target;
+    target.classList.add("cloze-revealed");
+    ui.clozeFeedback.classList.remove("hidden");
+    positionClozeFeedback(target);
+  }
+
+  function handleEditorClick(event) {
+    const cloze = event.target.closest(".cloze");
+    if (!cloze) {
+      hideClozeFeedback();
+      return;
+    }
+    if (!state.clozeHidden) {
+      return;
+    }
+    event.preventDefault();
+    hideClozeFeedback();
+    showClozeFeedback(cloze);
+  }
+
+  function handleClozeFeedbackClick(event) {
+    const button = event.target.closest("button[data-feedback]");
+    if (!button) return;
+    event.preventDefault();
+    const label = button.textContent.trim();
+    hideClozeFeedback();
+    if (label) {
+      showToast(`Auto-évaluation : ${label}`);
+    }
+  }
+
+  function handleDocumentClick(event) {
+    if (!ui.clozeFeedback || ui.clozeFeedback.classList.contains("hidden")) {
+      return;
+    }
+    if (ui.clozeFeedback.contains(event.target)) {
+      return;
+    }
+    if (event.target.closest(".cloze")) {
+      return;
+    }
+    hideClozeFeedback();
+  }
+
+  function handleToolbarChange(event) {
+    const select = event.target.closest("select[data-command]");
+    if (!select || !state.currentNote) return;
+    let value = select.value;
+    const command = select.dataset.command;
+    if (command === "formatBlock" && value && !value.startsWith("<")) {
+      value = `<${value}>`;
+    }
+    document.execCommand(command, false, value);
+    handleEditorInput();
+    ui.noteEditor.focus();
   }
 
   function handleToolbarClick(event) {
@@ -684,6 +846,12 @@ function bootstrapApp() {
     } else if (action) {
       if (action === "applyHighlight") {
         applyHighlight();
+      } else if (action === "applyTextColor") {
+        applyTextColor(button.dataset.value);
+      } else if (action === "increaseFontSize") {
+        adjustFontSize(1);
+      } else if (action === "decreaseFontSize") {
+        adjustFontSize(-1);
       } else if (action === "createCloze") {
         createClozeFromSelection();
       } else if (action === "toggleClozeVisibility") {
@@ -940,7 +1108,15 @@ function bootstrapApp() {
     });
     ui.noteTitle.addEventListener("input", handleTitleInput);
     ui.noteEditor.addEventListener("input", handleEditorInput);
+    ui.noteEditor.addEventListener("click", handleEditorClick);
+    ui.noteEditor.addEventListener("scroll", hideClozeFeedback);
     ui.toolbar.addEventListener("click", handleToolbarClick);
+    ui.toolbar.addEventListener("change", handleToolbarChange);
+    if (ui.clozeFeedback) {
+      ui.clozeFeedback.addEventListener("click", handleClozeFeedbackClick);
+    }
+    document.addEventListener("click", handleDocumentClick);
+    window.addEventListener("resize", hideClozeFeedback);
     window.addEventListener("beforeunload", (event) => {
       if (state.hasUnsavedChanges) {
         event.preventDefault();
