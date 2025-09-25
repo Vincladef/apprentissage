@@ -750,6 +750,11 @@ function bootstrapApp() {
       cloze.dataset.placeholder = generateClozePlaceholder();
     }
     const points = setClozePoints(cloze, getClozePoints(cloze));
+    if (points <= 0) {
+      cloze.setAttribute("contenteditable", "false");
+    } else {
+      cloze.removeAttribute("contenteditable");
+    }
     if (points > 0) {
       cloze.classList.remove("cloze-revealed");
     }
@@ -788,7 +793,10 @@ function bootstrapApp() {
     wrapper.appendChild(fragment);
     range.insertNode(wrapper);
     selection.removeAllRanges();
-    selection.selectAllChildren(wrapper);
+    const afterRange = document.createRange();
+    afterRange.setStartAfter(wrapper);
+    afterRange.collapse(true);
+    selection.addRange(afterRange);
     ui.noteEditor.focus();
     refreshClozeElement(wrapper);
     handleEditorInput();
