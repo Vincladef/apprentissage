@@ -150,14 +150,13 @@
                   </button>
                   <button
                     type="button"
-                    class="toolbar-button toolbar-toggle"
-                    id="toggle-cloze-btn"
-                    data-action="toggleClozeVisibility"
-                    aria-pressed="false"
-                    title="Masquer temporairement le texte des trous"
+                    class="toolbar-button iteration-button"
+                    id="start-iteration-btn"
+                    data-action="startIteration"
+                    title="Nouvelle itération : diminuer tous les compteurs"
                   >
-                    <span class="icon" aria-hidden="true">👁</span>
-                    <span class="sr-only">Masquer les trous</span>
+                    <span class="icon" aria-hidden="true">🔁</span>
+                    <span>Nouvelle itération</span>
                   </button>
                 </div>
                 <div class="toolbar-group">
@@ -185,11 +184,11 @@
               <div id="cloze-feedback" class="cloze-feedback hidden" role="dialog" aria-modal="false">
                 <p class="cloze-feedback-title">As-tu trouvé la réponse&nbsp;?</p>
                 <div class="cloze-feedback-options">
-                  <button type="button" data-feedback="yes">Oui</button>
-                  <button type="button" data-feedback="rather-yes">Plutôt oui</button>
-                  <button type="button" data-feedback="neutral">Neutre</button>
-                  <button type="button" data-feedback="rather-no">Plutôt non</button>
-                  <button type="button" data-feedback="no">Non</button>
+                  <button type="button" data-feedback="yes">✅ Oui<br /><span>Réponse facile</span></button>
+                  <button type="button" data-feedback="rather-yes">🙂 Plutôt oui<br /><span>Quelques hésitations</span></button>
+                  <button type="button" data-feedback="neutral">😐 Neutre<br /><span>À revoir</span></button>
+                  <button type="button" data-feedback="rather-no">🤔 Plutôt non<br /><span>Erreur partielle</span></button>
+                  <button type="button" data-feedback="no">❌ Non<br /><span>Réponse incorrecte</span></button>
                 </div>
               </div>
             </div>

@@ -101,7 +101,34 @@ function bootstrapApp() {
   const DEFAULT_FONT_FAMILY = "Arial";
   const FONT_SIZE_STEPS = [10, 11, 12, 14, 18, 24, 32];
   const DEFAULT_FONT_SIZE_INDEX = 1;
-  const CLOZE_PLACEHOLDER_TEXT = "Réponse";
+  const CLOZE_PLACEHOLDER_TEXT = "[ … ]";
+  const CLOZE_FEEDBACK_RULES = {
+    yes: {
+      delta: 1,
+      label: "✅ Oui (réponse facile)",
+      toastType: "success"
+    },
+    "rather-yes": {
+      delta: 0.5,
+      label: "🙂 Plutôt oui (réponse trouvée mais hésitante)",
+      toastType: "success"
+    },
+    neutral: {
+      reset: true,
+      label: "😐 Neutre",
+      toastType: "info"
+    },
+    "rather-no": {
+      reset: true,
+      label: "🤔 Plutôt non (erreur partielle)",
+      toastType: "warning"
+    },
+    no: {
+      reset: true,
+      label: "❌ Non (réponse incorrecte ou oubliée)",
+      toastType: "error"
+    }
+  };
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -123,7 +150,6 @@ function bootstrapApp() {
     pendingSave: null,
     hasUnsavedChanges: false,
     lastSavedAt: null,
-    clozeHidden: false,
     fontSizeIndex: DEFAULT_FONT_SIZE_INDEX,
     activeCloze: null,
     pendingRemoteNote: null,
@@ -150,7 +176,6 @@ function bootstrapApp() {
     emptyState: document.getElementById("empty-note"),
     toast: document.getElementById("toast"),
     toolbar: document.querySelector(".editor-toolbar"),
-    toggleClozeBtn: document.getElementById("toggle-cloze-btn"),
     blockFormat: document.getElementById("block-format"),
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
@@ -158,7 +183,6 @@ function bootstrapApp() {
   };
 
   ui.logoutBtn.disabled = true;
-  updateClozeToggleButton();
   updateFontSizeDisplay();
   if (ui.fontFamily) {
     ui.fontFamily.value = DEFAULT_FONT_FAMILY;
@@ -299,8 +323,6 @@ function bootstrapApp() {
     ui.emptyState.classList.remove("hidden");
     ui.noteTitle.value = "";
     ui.noteEditor.innerHTML = "";
-    ui.noteEditor.classList.remove("cloze-hidden");
-    state.clozeHidden = false;
     state.fontSizeIndex = DEFAULT_FONT_SIZE_INDEX;
     state.pendingRemoteNote = null;
     state.isEditorFocused = false;
@@ -310,7 +332,6 @@ function bootstrapApp() {
     if (ui.fontFamily) {
       ui.fontFamily.value = DEFAULT_FONT_FAMILY;
     }
-    updateClozeToggleButton();
     updateFontSizeDisplay();
     updateSaveStatus();
   }
@@ -341,14 +362,14 @@ function bootstrapApp() {
       }
     }
 
+    refreshAllClozes();
+
     state.lastSavedAt = state.currentNote.updatedAt instanceof Date ? state.currentNote.updatedAt : null;
     if (state.hasUnsavedChanges) {
       updateSaveStatus("dirty");
     } else {
       updateSaveStatus(state.lastSavedAt ? "saved" : "", state.lastSavedAt || null);
     }
-    ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
-    updateClozeToggleButton();
     updateFontSizeDisplay();
   }
 
@@ -541,6 +562,7 @@ function bootstrapApp() {
 
   function handleEditorInput() {
     if (!state.currentNote) return;
+    refreshAllClozes();
     state.currentNote.contentHtml = ui.noteEditor.innerHTML;
     state.hasUnsavedChanges = true;
     state.pendingRemoteNote = null;
@@ -679,6 +701,66 @@ function bootstrapApp() {
     return CLOZE_PLACEHOLDER_TEXT;
   }
 
+  function normalizeClozePoints(value) {
+    const number = typeof value === "number" ? value : parseFloat(value);
+    if (!Number.isFinite(number) || number <= 0) {
+      return 0;
+    }
+    const rounded = Math.round(number * 2) / 2;
+    return Math.max(0, rounded);
+  }
+
+  function formatClozePoints(value) {
+    const normalized = normalizeClozePoints(value);
+    if (normalized === 0) {
+      return "0";
+    }
+    return Number.isInteger(normalized) ? String(Math.trunc(normalized)) : normalized.toString();
+  }
+
+  function getClozePoints(cloze) {
+    if (!cloze) return 0;
+    return normalizeClozePoints(cloze.dataset.points);
+  }
+
+  function setClozePoints(cloze, points) {
+    if (!cloze) return 0;
+    const normalized = normalizeClozePoints(points);
+    cloze.dataset.points = formatClozePoints(normalized);
+    cloze.classList.toggle("cloze-masked", normalized <= 0);
+    updateClozeTooltip(cloze, normalized);
+    return normalized;
+  }
+
+  function updateClozeTooltip(cloze, pointsValue = null) {
+    if (!cloze) return;
+    const points = pointsValue === null ? getClozePoints(cloze) : pointsValue;
+    const formatted = formatClozePoints(points);
+    if (points <= 0) {
+      cloze.setAttribute("title", "À réviser maintenant (compteur : 0)");
+    } else {
+      const suffix = points > 1 ? "s" : "";
+      cloze.setAttribute("title", `Compteur : ${formatted} point${suffix}`);
+    }
+  }
+
+  function refreshClozeElement(cloze) {
+    if (!cloze) return;
+    if (!cloze.dataset.placeholder) {
+      cloze.dataset.placeholder = generateClozePlaceholder();
+    }
+    const points = setClozePoints(cloze, getClozePoints(cloze));
+    if (points > 0) {
+      cloze.classList.remove("cloze-revealed");
+    }
+  }
+
+  function refreshAllClozes() {
+    if (!ui.noteEditor) return;
+    const clozes = ui.noteEditor.querySelectorAll(".cloze");
+    clozes.forEach((cloze) => refreshClozeElement(cloze));
+  }
+
   function createClozeFromSelection() {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -699,6 +781,8 @@ function bootstrapApp() {
     wrapper.className = "cloze";
     const placeholder = generateClozePlaceholder();
     wrapper.dataset.placeholder = placeholder;
+    wrapper.dataset.points = "0";
+    wrapper.classList.add("cloze-masked");
 
     const fragment = range.extractContents();
     wrapper.appendChild(fragment);
@@ -706,26 +790,51 @@ function bootstrapApp() {
     selection.removeAllRanges();
     selection.selectAllChildren(wrapper);
     ui.noteEditor.focus();
+    refreshClozeElement(wrapper);
     handleEditorInput();
   }
 
-  function toggleClozeVisibility() {
+  function startNewIteration() {
+    if (!state.currentNote) {
+      showToast("Sélectionnez une fiche pour lancer une itération.", "info");
+      return;
+    }
     hideClozeFeedback();
-    state.clozeHidden = !state.clozeHidden;
-    ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
-    updateClozeToggleButton();
-    ui.noteEditor.focus();
-  }
+    if (!ui.noteEditor) return;
+    const clozes = Array.from(ui.noteEditor.querySelectorAll(".cloze"));
+    if (!clozes.length) {
+      showToast("Aucun trou dans cette fiche pour le moment.", "info");
+      return;
+    }
 
-  function updateClozeToggleButton() {
-    if (!ui.toggleClozeBtn) return;
-    const labelText = state.clozeHidden ? "Afficher les trous" : "Masquer les trous";
-    ui.toggleClozeBtn.setAttribute("aria-pressed", state.clozeHidden ? "true" : "false");
-    ui.toggleClozeBtn.setAttribute("aria-label", labelText);
-    ui.toggleClozeBtn.setAttribute("title", labelText);
-    const srLabel = ui.toggleClozeBtn.querySelector(".sr-only");
-    if (srLabel) {
-      srLabel.textContent = labelText;
+    let changed = false;
+    let reactivatedCount = 0;
+
+    clozes.forEach((cloze) => {
+      const current = getClozePoints(cloze);
+      const next = Math.max(0, current - 1);
+      if (next !== current) {
+        changed = true;
+      }
+      if (current > 0 && next === 0) {
+        reactivatedCount += 1;
+      }
+      setClozePoints(cloze, next);
+      cloze.classList.remove("cloze-revealed");
+    });
+
+    refreshAllClozes();
+
+    if (changed) {
+      handleEditorInput();
+      if (reactivatedCount > 0) {
+        const plural = reactivatedCount > 1 ? "s" : "";
+        showToast(`Nouvelle itération : ${reactivatedCount} trou${plural} à réviser de nouveau.`, "success");
+      } else {
+        showToast("Nouvelle itération : compteurs mis à jour.", "success");
+      }
+    } else {
+      showToast("Nouvelle itération : aucun compteur à réduire.", "info");
     }
   }
 
@@ -806,6 +915,7 @@ function bootstrapApp() {
     target.classList.add("cloze-revealed");
     ui.clozeFeedback.classList.remove("hidden");
     positionClozeFeedback(target);
+    requestAnimationFrame(() => positionClozeFeedback(target));
   }
 
   function handleEditorClick(event) {
@@ -814,7 +924,8 @@ function bootstrapApp() {
       hideClozeFeedback();
       return;
     }
-    if (!state.clozeHidden) {
+    if (!cloze.classList.contains("cloze-masked")) {
+      hideClozeFeedback();
       return;
     }
     event.preventDefault();
@@ -826,11 +937,29 @@ function bootstrapApp() {
     const button = event.target.closest("button[data-feedback]");
     if (!button) return;
     event.preventDefault();
-    const label = button.textContent.trim();
-    hideClozeFeedback();
-    if (label) {
-      showToast(`Auto-évaluation : ${label}`);
+    const cloze = state.activeCloze;
+    const feedbackKey = button.dataset.feedback;
+    const feedback = CLOZE_FEEDBACK_RULES[feedbackKey];
+    if (!cloze || !feedback) {
+      hideClozeFeedback();
+      return;
     }
+
+    const currentPoints = getClozePoints(cloze);
+    const newPoints = feedback.reset ? 0 : currentPoints + (feedback.delta || 0);
+    const appliedPoints = setClozePoints(cloze, newPoints);
+    refreshClozeElement(cloze);
+    handleEditorInput();
+    hideClozeFeedback();
+
+    const label = feedback.label || button.textContent.trim();
+    const pointsLabel = formatClozePoints(appliedPoints);
+    const toastType = feedback.toastType || (feedback.reset ? "warning" : "success");
+    const suffix = appliedPoints > 1 ? "s" : "";
+    const counterMessage = appliedPoints > 0
+      ? `Compteur : ${pointsLabel} point${suffix}`
+      : "Compteur remis à 0";
+    showToast(`Auto-évaluation : ${label} • ${counterMessage}`, toastType);
   }
 
   function handleDocumentClick(event) {
@@ -882,8 +1011,8 @@ function bootstrapApp() {
         adjustFontSize(-1);
       } else if (action === "createCloze") {
         createClozeFromSelection();
-      } else if (action === "toggleClozeVisibility") {
-        toggleClozeVisibility();
+      } else if (action === "startIteration") {
+        startNewIteration();
       }
     }
     ui.noteEditor.focus();
@@ -979,14 +1108,12 @@ function bootstrapApp() {
     state.pendingSelectionId = null;
     state.hasUnsavedChanges = false;
     state.lastSavedAt = null;
-    state.clozeHidden = false;
     state.pendingRemoteNote = null;
     state.isEditorFocused = false;
     ui.notesContainer.innerHTML = "";
     showEmptyEditor();
     ui.currentUser.textContent = "";
     ui.logoutBtn.disabled = true;
-    updateClozeToggleButton();
   }
 
   async function handleLoginSubmit(event) {
