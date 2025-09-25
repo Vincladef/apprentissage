@@ -6,8 +6,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function ownerEmail(userId) {
+      // Adaptez le domaine si vous modifiez AUTH_EMAIL_DOMAIN dans app.js.
+      return userId + '@pseudo.apprentissage';
+    }
+
     function isOwner(userId) {
-      return isSignedIn() && request.auth.token.email == userId + '@pseudo.apprentissage';
+      return isSignedIn() && request.auth.token.email == ownerEmail(userId);
     }
 
     function stringMax(value, maxLen) {
@@ -18,20 +23,28 @@ service cloud.firestore {
       return value == null || stringMax(value, maxLen);
     }
 
-    function isTimestamp(value) {
-      return value is timestamp;
+    function isServerTimestamp(value) {
+      return value is timestamp && value == request.time;
     }
 
-    function optionalTimestamp(value) {
-      return value == null || value is timestamp;
+    function noteHasValidKeys(data) {
+      return data.keys().hasOnly(['title', 'contentHtml', 'createdAt', 'updatedAt']);
     }
 
-    function isValidNote(data) {
-      return data.keys().hasOnly(['title', 'contentHtml', 'createdAt', 'updatedAt']) &&
-             'title' in data && stringMax(data.title, 200) &&
-             'contentHtml' in data && optionalString(data.contentHtml, 50000) &&
-             'createdAt' in data && isTimestamp(data.createdAt) &&
-             (!('updatedAt' in data) || optionalTimestamp(data.updatedAt));
+    function canCreateNote(data) {
+      return noteHasValidKeys(data) &&
+             stringMax(data.title, 200) &&
+             optionalString(data.contentHtml, 50000) &&
+             isServerTimestamp(data.createdAt) &&
+             isServerTimestamp(data.updatedAt);
+    }
+
+    function canUpdateNote(newData, existingData) {
+      return noteHasValidKeys(newData) &&
+             stringMax(newData.title, 200) &&
+             optionalString(newData.contentHtml, 50000) &&
+             newData.createdAt == existingData.createdAt &&
+             isServerTimestamp(newData.updatedAt);
     }
 
     match /users/{userId} {
@@ -39,7 +52,7 @@ service cloud.firestore {
 
       allow create: if isOwner(userId) &&
                     request.resource.data.keys().hasOnly(['createdAt']) &&
-                    isTimestamp(request.resource.data.createdAt);
+                    isServerTimestamp(request.resource.data.createdAt);
 
       allow delete: if isOwner(userId);
 
@@ -47,11 +60,10 @@ service cloud.firestore {
         allow read: if isOwner(userId);
 
         allow create: if isOwner(userId) &&
-                      isValidNote(request.resource.data);
+                      canCreateNote(request.resource.data);
 
         allow update: if isOwner(userId) &&
-                      isValidNote(request.resource.data) &&
-                      request.resource.data.createdAt == resource.data.createdAt;
+                      canUpdateNote(request.resource.data, resource.data);
 
         allow delete: if isOwner(userId);
       }
