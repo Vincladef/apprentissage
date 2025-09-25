@@ -175,6 +175,13 @@ function bootstrapApp() {
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet()
   };
 
+  function getManualRevealSet() {
+    if (!state[CLOZE_MANUAL_REVEAL_SET_KEY]) {
+      state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
+    }
+    return state[CLOZE_MANUAL_REVEAL_SET_KEY];
+  }
+
   const views = {
     login: document.getElementById("login-screen"),
     workspace: document.getElementById("workspace")
@@ -202,6 +209,7 @@ function bootstrapApp() {
     fontSizeValue: document.getElementById("font-size-value"),
     clozeFeedback: document.getElementById("cloze-feedback"),
     sidebarToggle: document.getElementById("toggle-sidebar"),
+    sidebarRestore: document.getElementById("restore-sidebar-btn"),
     workspaceOverlay: document.getElementById("drawer-overlay"),
     mobileNotesBtn: document.getElementById("mobile-notes-btn"),
     focusToggle: document.getElementById("toggle-focus-btn"),
@@ -254,6 +262,15 @@ function bootstrapApp() {
       ui.sidebarToggle.addEventListener("click", () => {
         const isCollapsed = workspaceLayout?.classList.contains("sidebar-collapsed");
         setSidebarCollapsed(!isCollapsed);
+      });
+    }
+
+    if (ui.sidebarRestore) {
+      ui.sidebarRestore.addEventListener("click", () => {
+        setSidebarCollapsed(false);
+        if (ui.sidebarToggle) {
+          ui.sidebarToggle.focus();
+        }
       });
     }
 
@@ -343,16 +360,25 @@ function bootstrapApp() {
   }
 
   function setSidebarCollapsed(collapsed) {
-    if (!workspaceLayout || !ui.sidebarToggle) return;
-    workspaceLayout.classList.toggle("sidebar-collapsed", Boolean(collapsed));
-    ui.sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
-    ui.sidebarToggle.setAttribute(
-      "aria-label",
-      collapsed ? "Afficher la liste des fiches" : "Réduire la liste des fiches"
-    );
-    const icon = ui.sidebarToggle.querySelector("span");
-    if (icon) {
-      icon.textContent = collapsed ? "☰" : "⟷";
+    if (!workspaceLayout) return;
+    const shouldCollapse = Boolean(collapsed);
+    workspaceLayout.classList.toggle("sidebar-collapsed", shouldCollapse);
+
+    if (ui.sidebarToggle) {
+      ui.sidebarToggle.setAttribute("aria-expanded", String(!shouldCollapse));
+      ui.sidebarToggle.setAttribute(
+        "aria-label",
+        shouldCollapse ? "Afficher la liste des fiches" : "Réduire la liste des fiches"
+      );
+      const icon = ui.sidebarToggle.querySelector("span");
+      if (icon) {
+        icon.textContent = shouldCollapse ? "☰" : "⟷";
+      }
+    }
+
+    if (ui.sidebarRestore) {
+      ui.sidebarRestore.hidden = !shouldCollapse;
+      ui.sidebarRestore.setAttribute("aria-hidden", String(!shouldCollapse));
     }
   }
 
@@ -506,7 +532,7 @@ function bootstrapApp() {
     container.querySelectorAll("*").forEach((el) => {
       Array.from(el.attributes).forEach((attr) => {
         if (attr.name === CLOZE_MANUAL_REVEAL_ATTR) {
-          el.removeAttribute(attr.name);
+          el.setAttribute(CLOZE_MANUAL_REVEAL_ATTR, "1");
           return;
         }
         if (attr.name.startsWith("on")) {
@@ -1088,6 +1114,13 @@ function bootstrapApp() {
 
   function refreshClozeElement(cloze) {
     if (!cloze) return;
+    const manualRevealSet = getManualRevealSet();
+    const hasManualRevealAttr = cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1";
+    if (hasManualRevealAttr) {
+      manualRevealSet.add(cloze);
+    } else if (manualRevealSet.has(cloze)) {
+      cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
+    }
     if (!cloze.dataset.placeholder) {
       cloze.dataset.placeholder = generateClozePlaceholder();
     }
@@ -1306,16 +1339,14 @@ function bootstrapApp() {
     }
 
     const wasMasked = cloze.classList.contains("cloze-masked");
-    if (!state[CLOZE_MANUAL_REVEAL_SET_KEY]) {
-      state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
-    }
+    const manualRevealSet = getManualRevealSet();
     if (wasMasked) {
-      state[CLOZE_MANUAL_REVEAL_SET_KEY].add(cloze);
+      manualRevealSet.add(cloze);
       cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
       refreshClozeElement(cloze);
     }
 
-    const isManuallyRevealed = state[CLOZE_MANUAL_REVEAL_SET_KEY].has(cloze);
+    const isManuallyRevealed = manualRevealSet.has(cloze);
     if (!wasMasked && !isManuallyRevealed) {
       hideClozeFeedback();
       return;

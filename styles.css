@@ -518,6 +518,10 @@ input[type="text"]:focus {
   gap: 0.4rem;
 }
 
+#restore-sidebar-btn {
+  display: inline-flex;
+}
+
 .editor-header-actions .icon-button {
   padding: 0.35rem 0.55rem;
 }
@@ -1051,6 +1055,10 @@ body.notes-drawer-open .drawer-overlay {
     flex-direction: row;
     align-items: center;
     gap: 0.6rem;
+  }
+
+  #restore-sidebar-btn {
+    display: none !important;
   }
 
   #toggle-sidebar {
