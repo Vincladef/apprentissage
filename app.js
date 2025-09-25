@@ -216,6 +216,7 @@ function bootstrapApp() {
 
   const workspaceLayout = document.querySelector(".workspace");
   const bodyElement = document.body;
+  const rootElement = document.documentElement;
 
   const SCROLL_COLLAPSE_THRESHOLD = 24;
 
@@ -464,6 +465,138 @@ function bootstrapApp() {
       return;
     }
     setToolbarMoreMenu(false);
+  }
+
+  function cssValueToPx(value, contextElement = rootElement) {
+    if (!value) return 0;
+    const trimmed = `${value}`.trim();
+    if (!trimmed) return 0;
+    if (trimmed.endsWith("px")) {
+      const parsed = parseFloat(trimmed);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    if (trimmed.endsWith("rem")) {
+      const remValue = parseFloat(trimmed);
+      if (Number.isNaN(remValue)) {
+        return 0;
+      }
+      const rootFontSize = parseFloat(getComputedStyle(rootElement).fontSize);
+      return remValue * (Number.isNaN(rootFontSize) ? 16 : rootFontSize);
+    }
+    if (trimmed.endsWith("em")) {
+      const emValue = parseFloat(trimmed);
+      if (Number.isNaN(emValue)) {
+        return 0;
+      }
+      const contextFontSize = parseFloat(getComputedStyle(contextElement).fontSize);
+      return emValue * (Number.isNaN(contextFontSize) ? 16 : contextFontSize);
+    }
+    const fallback = parseFloat(trimmed);
+    return Number.isNaN(fallback) ? 0 : fallback;
+  }
+
+  function initMobileToolbarLayout() {
+    if (!ui.toolbar) return;
+
+    const mobileQuery = window.matchMedia("(max-width: 900px)");
+    const viewport = window.visualViewport;
+    let animationFrame = null;
+    let lastKnownHeight = null;
+
+    const clearInlineMetrics = () => {
+      rootElement.style.removeProperty("--mobile-toolbar-bottom");
+      rootElement.style.removeProperty("--mobile-toolbar-height");
+      rootElement.style.removeProperty("--editor-mobile-bottom-padding");
+    };
+
+    const getSpacingPx = () => {
+      const computedSpacing = getComputedStyle(rootElement).getPropertyValue("--mobile-toolbar-spacing");
+      const spacing = cssValueToPx(computedSpacing);
+      return spacing > 0 ? spacing : 14;
+    };
+
+    const applyToolbarMetrics = () => {
+      if (!mobileQuery.matches) {
+        clearInlineMetrics();
+        return;
+      }
+
+      const spacingPx = getSpacingPx();
+      let keyboardInset = 0;
+
+      if (viewport && typeof viewport.height === "number") {
+        const offsetTop = typeof viewport.offsetTop === "number" ? viewport.offsetTop : 0;
+        keyboardInset = Math.max(0, window.innerHeight - viewport.height - offsetTop);
+      }
+
+      const bottom = Math.max(spacingPx, keyboardInset + spacingPx);
+      const toolbarRect = ui.toolbar.getBoundingClientRect();
+
+      if (toolbarRect.height > 0) {
+        lastKnownHeight = toolbarRect.height;
+      }
+
+      const fallbackHeight = cssValueToPx(
+        getComputedStyle(rootElement).getPropertyValue("--mobile-toolbar-height")
+      );
+      const toolbarHeight =
+        (lastKnownHeight && lastKnownHeight > 0 ? lastKnownHeight : 0) || (fallbackHeight || 76);
+
+      rootElement.style.setProperty("--mobile-toolbar-bottom", `${bottom}px`);
+      rootElement.style.setProperty("--mobile-toolbar-height", `${toolbarHeight}px`);
+
+      const paddingExtra = Math.max(spacingPx * 2, spacingPx + 24);
+      rootElement.style.setProperty(
+        "--editor-mobile-bottom-padding",
+        `${bottom + toolbarHeight + paddingExtra}px`
+      );
+    };
+
+    const scheduleMetricsUpdate = () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = requestAnimationFrame(() => {
+        animationFrame = null;
+        applyToolbarMetrics();
+      });
+    };
+
+    const handleMediaChange = (event) => {
+      if (!event.matches) {
+        clearInlineMetrics();
+      }
+      scheduleMetricsUpdate();
+    };
+
+    applyToolbarMetrics();
+
+    if (viewport) {
+      viewport.addEventListener("resize", scheduleMetricsUpdate);
+      viewport.addEventListener("scroll", scheduleMetricsUpdate);
+    }
+
+    window.addEventListener("resize", scheduleMetricsUpdate);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(scheduleMetricsUpdate, 120);
+    });
+    document.addEventListener("focusin", scheduleMetricsUpdate);
+    document.addEventListener("focusout", scheduleMetricsUpdate);
+
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(() => {
+        if (mobileQuery.matches) {
+          scheduleMetricsUpdate();
+        }
+      });
+      resizeObserver.observe(ui.toolbar);
+    }
+
+    if (typeof mobileQuery.addEventListener === "function") {
+      mobileQuery.addEventListener("change", handleMediaChange);
+    } else if (typeof mobileQuery.addListener === "function") {
+      mobileQuery.addListener(handleMediaChange);
+    }
   }
 
   function isPermissionDenied(error) {
@@ -1747,5 +1880,6 @@ function bootstrapApp() {
   }
 
   initEvents();
+  initMobileToolbarLayout();
   initAuth();
 }

@@ -12,6 +12,12 @@
   --warning: #f9ab00;
   --header-height: 4rem;
   --toolbar-offset: var(--header-height);
+  --mobile-toolbar-spacing: 0.85rem;
+  --mobile-toolbar-bottom: calc(env(safe-area-inset-bottom, 0) + var(--mobile-toolbar-spacing));
+  --mobile-toolbar-height: 4.75rem;
+  --editor-mobile-bottom-padding: calc(
+    var(--mobile-toolbar-bottom) + var(--mobile-toolbar-height) + (var(--mobile-toolbar-spacing) * 2)
+  );
   font-family: "Inter", "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -1043,6 +1049,10 @@ body.notes-drawer-open .drawer-overlay {
     --header-height: 3.6rem;
     --mobile-toolbar-spacing: 0.85rem;
     --mobile-toolbar-bottom: calc(env(safe-area-inset-bottom, 0) + var(--mobile-toolbar-spacing));
+    --mobile-toolbar-height: 4.75rem;
+    --editor-mobile-bottom-padding: calc(
+      var(--mobile-toolbar-bottom) + var(--mobile-toolbar-height) + (var(--mobile-toolbar-spacing) * 2)
+    );
   }
 
   .app-header {
@@ -1108,8 +1118,7 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .editor-area {
-    padding: 1rem 1rem 5.75rem;
-    padding: 1rem 1rem calc(5.75rem + env(safe-area-inset-bottom, 0));
+    padding: 1rem 1rem var(--editor-mobile-bottom-padding);
     min-height: calc(100vh - var(--header-height) - 2.5rem);
     min-height: calc(100vh - var(--header-height) - 2.5rem - env(safe-area-inset-bottom, 0));
   }
@@ -1118,7 +1127,7 @@ body.notes-drawer-open .drawer-overlay {
     position: fixed;
     left: 50%;
     bottom: var(--mobile-toolbar-bottom);
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
     width: calc(100% - 1.7rem);
     width: calc(100% - (var(--mobile-toolbar-spacing) * 2));
     max-width: 520px;
@@ -1126,9 +1135,9 @@ body.notes-drawer-open .drawer-overlay {
     padding: 0.5rem 0.65rem;
     gap: 0.45rem;
     border-radius: 1rem;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    background: rgba(248, 250, 252, 0.96);
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.2), 0 4px 12px rgba(15, 23, 42, 0.16);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     z-index: 20;
@@ -1239,6 +1248,8 @@ body.notes-drawer-open .drawer-overlay {
     padding: 1.75rem 1.5rem;
     border-radius: 0.4rem;
     min-height: calc(100vh - var(--header-height) - 6.5rem);
+    padding-bottom: calc(1.75rem + var(--editor-mobile-bottom-padding));
+    scroll-padding-bottom: calc(2.5rem + var(--editor-mobile-bottom-padding));
   }
 
   .editor-header {
@@ -1271,6 +1282,10 @@ body.notes-drawer-open .drawer-overlay {
   :root {
     --mobile-toolbar-spacing: 0.65rem;
     --mobile-toolbar-bottom: calc(env(safe-area-inset-bottom, 0) + var(--mobile-toolbar-spacing));
+    --mobile-toolbar-height: 4.5rem;
+    --editor-mobile-bottom-padding: calc(
+      var(--mobile-toolbar-bottom) + var(--mobile-toolbar-height) + (var(--mobile-toolbar-spacing) * 2)
+    );
   }
 
   .app-main {
@@ -1287,8 +1302,7 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .editor-area {
-    padding: 0.75rem 0.85rem 5.25rem;
-    padding: 0.75rem 0.85rem calc(5.25rem + env(safe-area-inset-bottom, 0));
+    padding: 0.75rem 0.85rem var(--editor-mobile-bottom-padding);
     min-height: calc(100vh - var(--header-height));
     min-height: calc(100vh - var(--header-height) - env(safe-area-inset-bottom, 0));
   }
