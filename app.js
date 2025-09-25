@@ -125,7 +125,9 @@ function bootstrapApp() {
     lastSavedAt: null,
     clozeHidden: false,
     fontSizeIndex: DEFAULT_FONT_SIZE_INDEX,
-    activeCloze: null
+    activeCloze: null,
+    pendingRemoteNote: null,
+    isEditorFocused: false
   };
 
   const views = {
@@ -300,6 +302,8 @@ function bootstrapApp() {
     ui.noteEditor.classList.remove("cloze-hidden");
     state.clozeHidden = false;
     state.fontSizeIndex = DEFAULT_FONT_SIZE_INDEX;
+    state.pendingRemoteNote = null;
+    state.isEditorFocused = false;
     if (ui.blockFormat) {
       ui.blockFormat.value = "p";
     }
@@ -346,6 +350,25 @@ function bootstrapApp() {
     ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
     updateClozeToggleButton();
     updateFontSizeDisplay();
+  }
+
+  function queueRemoteNoteUpdate(note) {
+    if (!note || note.id !== state.currentNoteId) {
+      state.pendingRemoteNote = null;
+      return;
+    }
+    state.pendingRemoteNote = { ...note };
+  }
+
+  function applyPendingRemoteNote() {
+    if (!state.pendingRemoteNote || state.pendingRemoteNote.id !== state.currentNoteId) {
+      state.pendingRemoteNote = null;
+      return;
+    }
+    state.currentNote = { ...state.pendingRemoteNote };
+    state.pendingRemoteNote = null;
+    state.hasUnsavedChanges = false;
+    applyCurrentNoteToEditor({ force: true });
   }
 
   function updateActiveNoteHighlight() {
@@ -442,12 +465,15 @@ function bootstrapApp() {
     if (state.currentNoteId) {
       const current = state.notes.find((note) => note.id === state.currentNoteId);
       if (current) {
-        if (!state.hasUnsavedChanges || !state.currentNote) {
+        if (state.hasUnsavedChanges && state.currentNote) {
+          updateSaveStatus("dirty");
+        } else if (state.isEditorFocused) {
+          queueRemoteNoteUpdate(current);
+        } else {
           state.currentNote = { ...current };
+          state.pendingRemoteNote = null;
           state.hasUnsavedChanges = false;
           applyCurrentNoteToEditor({ force: true });
-        } else {
-          updateSaveStatus("dirty");
         }
         updateActiveNoteHighlight();
         return;
@@ -497,6 +523,7 @@ function bootstrapApp() {
     if (!state.currentNote) return;
     state.currentNote.title = event.target.value;
     state.hasUnsavedChanges = true;
+    state.pendingRemoteNote = null;
     updateLocalNoteCache(state.currentNoteId, { title: event.target.value });
     const activeTitle = ui.notesContainer.querySelector(
       `.note-card[data-note-id="${state.currentNoteId}"] .note-card-title`
@@ -516,6 +543,7 @@ function bootstrapApp() {
     if (!state.currentNote) return;
     state.currentNote.contentHtml = ui.noteEditor.innerHTML;
     state.hasUnsavedChanges = true;
+    state.pendingRemoteNote = null;
     updateSaveStatus("dirty");
     scheduleSave();
   }
@@ -952,6 +980,8 @@ function bootstrapApp() {
     state.hasUnsavedChanges = false;
     state.lastSavedAt = null;
     state.clozeHidden = false;
+    state.pendingRemoteNote = null;
+    state.isEditorFocused = false;
     ui.notesContainer.innerHTML = "";
     showEmptyEditor();
     ui.currentUser.textContent = "";
@@ -1110,6 +1140,17 @@ function bootstrapApp() {
     ui.noteEditor.addEventListener("input", handleEditorInput);
     ui.noteEditor.addEventListener("click", handleEditorClick);
     ui.noteEditor.addEventListener("scroll", hideClozeFeedback);
+    ui.noteEditor.addEventListener("focus", () => {
+      state.isEditorFocused = true;
+    });
+    ui.noteEditor.addEventListener("blur", () => {
+      state.isEditorFocused = false;
+      if (!state.hasUnsavedChanges) {
+        applyPendingRemoteNote();
+      } else {
+        state.pendingRemoteNote = null;
+      }
+    });
     ui.toolbar.addEventListener("click", handleToolbarClick);
     ui.toolbar.addEventListener("change", handleToolbarChange);
     if (ui.clozeFeedback) {
