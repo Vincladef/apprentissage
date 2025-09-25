@@ -130,6 +130,7 @@ function bootstrapApp() {
     }
   };
   const CLOZE_DEFER_DATA_KEY = "deferMask";
+  const CLOZE_MANUAL_REVEAL_SET_KEY = "revealedClozes";
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -154,7 +155,8 @@ function bootstrapApp() {
     fontSizeIndex: DEFAULT_FONT_SIZE_INDEX,
     activeCloze: null,
     pendingRemoteNote: null,
-    isEditorFocused: false
+    isEditorFocused: false,
+    [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet()
   };
 
   const views = {
@@ -327,6 +329,7 @@ function bootstrapApp() {
     state.fontSizeIndex = DEFAULT_FONT_SIZE_INDEX;
     state.pendingRemoteNote = null;
     state.isEditorFocused = false;
+    state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
     if (ui.blockFormat) {
       ui.blockFormat.value = "p";
     }
@@ -356,6 +359,7 @@ function bootstrapApp() {
     const shouldUpdateContent =
       force || ((!isFocused || !state.hasUnsavedChanges) && ui.noteEditor.innerHTML !== desiredHtml);
     if (shouldUpdateContent) {
+      state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
       const selection = isFocused ? captureSelection(ui.noteEditor) : null;
       ui.noteEditor.innerHTML = desiredHtml;
       if (selection) {
@@ -729,6 +733,9 @@ function bootstrapApp() {
     if (cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1") {
       return false;
     }
+    if (state[CLOZE_MANUAL_REVEAL_SET_KEY] && state[CLOZE_MANUAL_REVEAL_SET_KEY].has(cloze)) {
+      return false;
+    }
     const points =
       pointsValue === null ? getClozePoints(cloze) : normalizeClozePoints(pointsValue);
     return points <= 0;
@@ -834,6 +841,7 @@ function bootstrapApp() {
       return;
     }
 
+    state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
     let changed = false;
     let reactivatedCount = 0;
     let skippedCount = 0;
@@ -973,10 +981,22 @@ function bootstrapApp() {
       hideClozeFeedback();
       return;
     }
-    if (!cloze.classList.contains("cloze-masked")) {
+
+    const wasMasked = cloze.classList.contains("cloze-masked");
+    if (!state[CLOZE_MANUAL_REVEAL_SET_KEY]) {
+      state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
+    }
+    if (wasMasked) {
+      state[CLOZE_MANUAL_REVEAL_SET_KEY].add(cloze);
+      refreshClozeElement(cloze);
+    }
+
+    const isManuallyRevealed = state[CLOZE_MANUAL_REVEAL_SET_KEY].has(cloze);
+    if (!wasMasked && !isManuallyRevealed) {
       hideClozeFeedback();
       return;
     }
+
     event.preventDefault();
     hideClozeFeedback();
     showClozeFeedback(cloze);
