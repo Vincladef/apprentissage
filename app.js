@@ -147,6 +147,147 @@ function bootstrapApp() {
   const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
   const CLOZE_MANUAL_REVEAL_ATTR = "data-manual-reveal";
 
+  const DASHBOARD_DEFAULT_PERIOD = 10;
+  const DASHBOARD_RESPONSE_MAP = {
+    yes: { label: "Oui", className: "dashboard-response--yes", score: 5 },
+    "rather-yes": {
+      label: "Plutôt oui",
+      className: "dashboard-response--rather-yes",
+      score: 4
+    },
+    neutral: { label: "Neutre", className: "dashboard-response--neutral", score: 3 },
+    "rather-no": {
+      label: "Plutôt non",
+      className: "dashboard-response--rather-no",
+      score: 2
+    },
+    no: { label: "Non", className: "dashboard-response--no", score: 1 }
+  };
+  const DASHBOARD_LINE_COLORS = [
+    "#2563eb",
+    "#7c3aed",
+    "#059669",
+    "#d97706",
+    "#dc2626",
+    "#0ea5e9",
+    "#9333ea"
+  ];
+  const DASHBOARD_SAMPLE_DATA = {
+    iterations: Array.from({ length: 16 }, (_, index) => index + 1),
+    consignes: [
+      {
+        id: "consigne-1",
+        label: "Présenter la notion centrale",
+        responses: {
+          16: "yes",
+          15: "rather-yes",
+          14: "yes",
+          13: "neutral",
+          12: "yes",
+          11: "yes",
+          10: "rather-yes",
+          9: "neutral",
+          8: "yes",
+          7: "yes",
+          6: "rather-yes",
+          5: "neutral",
+          4: "yes",
+          3: "rather-yes",
+          2: "neutral",
+          1: "rather-no"
+        }
+      },
+      {
+        id: "consigne-2",
+        label: "Donner un exemple concret",
+        responses: {
+          16: "rather-yes",
+          15: "rather-yes",
+          14: "neutral",
+          13: "rather-yes",
+          12: "yes",
+          11: "yes",
+          10: "neutral",
+          9: "neutral",
+          8: "rather-yes",
+          7: "neutral",
+          6: "rather-no",
+          5: "rather-no",
+          4: "neutral",
+          3: "rather-no",
+          2: "rather-no",
+          1: "no"
+        }
+      },
+      {
+        id: "consigne-3",
+        label: "Décrire la procédure étape par étape",
+        responses: {
+          16: "yes",
+          15: "yes",
+          14: "rather-yes",
+          13: "rather-yes",
+          12: "neutral",
+          11: "rather-yes",
+          10: "rather-yes",
+          9: "neutral",
+          8: "rather-no",
+          7: "neutral",
+          6: "neutral",
+          5: "rather-no",
+          4: "rather-no",
+          3: "neutral",
+          2: "no",
+          1: "no"
+        }
+      },
+      {
+        id: "consigne-4",
+        label: "Identifier les erreurs fréquentes",
+        responses: {
+          16: "neutral",
+          15: "neutral",
+          14: "rather-no",
+          13: "rather-no",
+          12: "rather-no",
+          11: "neutral",
+          10: "rather-yes",
+          9: "neutral",
+          8: "neutral",
+          7: "rather-yes",
+          6: "rather-yes",
+          5: "neutral",
+          4: "neutral",
+          3: "rather-no",
+          2: "rather-no",
+          1: "no"
+        }
+      },
+      {
+        id: "consigne-5",
+        label: "Synthétiser le point clé",
+        responses: {
+          16: "yes",
+          15: "yes",
+          14: "yes",
+          13: "rather-yes",
+          12: "rather-yes",
+          11: "neutral",
+          10: "rather-yes",
+          9: "rather-yes",
+          8: "neutral",
+          7: "neutral",
+          6: "rather-no",
+          5: "rather-no",
+          4: "neutral",
+          3: "rather-yes",
+          2: "rather-yes",
+          1: "neutral"
+        }
+      }
+    ]
+  };
+
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
@@ -172,7 +313,8 @@ function bootstrapApp() {
     pendingRemoteNote: null,
     isEditorFocused: false,
     savedSelection: null,
-    [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet()
+    [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
+    dashboard: null
   };
 
   function getManualRevealSet() {
@@ -211,7 +353,15 @@ function bootstrapApp() {
     workspaceOverlay: document.getElementById("drawer-overlay"),
     mobileNotesBtn: document.getElementById("mobile-notes-btn"),
     toolbarMoreBtn: document.getElementById("toolbar-more-btn"),
-    toolbarMorePanel: document.getElementById("toolbar-more-panel")
+    toolbarMorePanel: document.getElementById("toolbar-more-panel"),
+    dashboardPanel: document.getElementById("dashboard-panel"),
+    dashboardPeriodButtons: Array.from(
+      document.querySelectorAll("[data-dashboard-period]") || []
+    ),
+    dashboardTableHead: document.getElementById("dashboard-table-head"),
+    dashboardTableBody: document.getElementById("dashboard-table-body"),
+    dashboardChart: document.getElementById("dashboard-chart"),
+    dashboardLegend: document.getElementById("dashboard-legend")
   };
 
   const workspaceLayout = document.querySelector(".workspace");
@@ -264,6 +414,339 @@ function bootstrapApp() {
 
   window.addEventListener("scroll", updateHeaderCollapseState, { passive: true });
   updateHeaderCollapseState();
+
+  function getDashboardColor(consigneId, index) {
+    if (!state.dashboard) {
+      return DASHBOARD_LINE_COLORS[index % DASHBOARD_LINE_COLORS.length];
+    }
+    if (!state.dashboard.colorByConsigne) {
+      state.dashboard.colorByConsigne = new Map();
+    }
+    if (!state.dashboard.colorByConsigne.has(consigneId)) {
+      const color = DASHBOARD_LINE_COLORS[index % DASHBOARD_LINE_COLORS.length];
+      state.dashboard.colorByConsigne.set(consigneId, color);
+    }
+    return state.dashboard.colorByConsigne.get(consigneId);
+  }
+
+  function assignDashboardColors() {
+    if (!state.dashboard) return;
+    const consignes = state.dashboard.data?.consignes || [];
+    state.dashboard.colorByConsigne = new Map();
+    consignes.forEach((consigne, index) => {
+      const color = DASHBOARD_LINE_COLORS[index % DASHBOARD_LINE_COLORS.length];
+      state.dashboard.colorByConsigne.set(consigne.id, color);
+    });
+  }
+
+  function handleDashboardPeriodClick(event) {
+    if (!state.dashboard) return;
+    const target = event.currentTarget;
+    if (!target) return;
+    const nextPeriod = Number.parseInt(target.dataset.dashboardPeriod, 10);
+    if (!Number.isFinite(nextPeriod)) return;
+    if (state.dashboard.period === nextPeriod) return;
+    state.dashboard.period = nextPeriod;
+    renderDashboard();
+  }
+
+  function getDashboardIterations() {
+    if (!state.dashboard) return [];
+    const iterations = Array.isArray(state.dashboard.data?.iterations)
+      ? [...state.dashboard.data.iterations]
+      : [];
+    iterations.sort((a, b) => a - b);
+    const period = state.dashboard.period || DASHBOARD_DEFAULT_PERIOD;
+    const start = Math.max(0, iterations.length - period);
+    return iterations.slice(start).reverse();
+  }
+
+  function updateDashboardPeriodButtons() {
+    if (!state.dashboard || !ui.dashboardPeriodButtons) return;
+    const currentPeriod = state.dashboard.period;
+    ui.dashboardPeriodButtons.forEach((button) => {
+      const period = Number.parseInt(button.dataset.dashboardPeriod, 10);
+      const isActive = period === currentPeriod;
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function renderDashboardTable(iterations) {
+    if (!ui.dashboardTableHead || !ui.dashboardTableBody) return;
+    const consignes = state.dashboard?.data?.consignes || [];
+    ui.dashboardTableHead.innerHTML = "";
+    ui.dashboardTableBody.innerHTML = "";
+
+    const headerRow = ui.dashboardTableHead;
+    const consigneHeader = document.createElement("th");
+    consigneHeader.textContent = "Consigne";
+    headerRow.appendChild(consigneHeader);
+
+    if (iterations.length) {
+      iterations.forEach((iteration) => {
+        const th = document.createElement("th");
+        th.textContent = `Itération ${iteration}`;
+        headerRow.appendChild(th);
+      });
+    } else {
+      const placeholder = document.createElement("th");
+      placeholder.textContent = "Aucune itération";
+      headerRow.appendChild(placeholder);
+    }
+
+    if (!iterations.length || !consignes.length) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = Math.max(2, iterations.length + 1);
+      cell.className = "dashboard-empty-message";
+      cell.textContent = "Aucune donnée à afficher pour cette période.";
+      row.appendChild(cell);
+      ui.dashboardTableBody.appendChild(row);
+      return;
+    }
+
+    const useCompactResponses = iterations.length > 8;
+
+    consignes.forEach((consigne, index) => {
+      const row = document.createElement("tr");
+      const labelCell = document.createElement("td");
+      labelCell.textContent = consigne.label;
+      row.appendChild(labelCell);
+
+      iterations.forEach((iteration) => {
+        const cell = document.createElement("td");
+        const responseKey = consigne.responses?.[iteration];
+        const config = responseKey ? DASHBOARD_RESPONSE_MAP[responseKey] : null;
+        const chip = document.createElement("span");
+        chip.className = "dashboard-response";
+        if (useCompactResponses) {
+          chip.classList.add("small");
+        }
+        if (config) {
+          chip.classList.add(config.className);
+          chip.textContent = config.label;
+          chip.title = `${config.label} pour l'itération ${iteration}`;
+        } else {
+          chip.classList.add("dashboard-response--empty");
+          chip.textContent = "—";
+          chip.title = `Aucune réponse enregistrée pour l'itération ${iteration}`;
+        }
+        cell.appendChild(chip);
+        row.appendChild(cell);
+      });
+
+      ui.dashboardTableBody.appendChild(row);
+    });
+  }
+
+  function renderDashboardLegend() {
+    if (!ui.dashboardLegend) return;
+    ui.dashboardLegend.innerHTML = "";
+    const consignes = state.dashboard?.data?.consignes || [];
+    if (!consignes.length) {
+      const message = document.createElement("p");
+      message.className = "dashboard-empty-message";
+      message.textContent = "Aucune consigne disponible.";
+      ui.dashboardLegend.appendChild(message);
+      return;
+    }
+
+    consignes.forEach((consigne, index) => {
+      const item = document.createElement("div");
+      item.className = "dashboard-legend-item";
+      const swatch = document.createElement("span");
+      swatch.className = "dashboard-legend-swatch";
+      swatch.style.backgroundColor = getDashboardColor(consigne.id, index);
+      item.appendChild(swatch);
+      const label = document.createElement("span");
+      label.textContent = consigne.label;
+      item.appendChild(label);
+      ui.dashboardLegend.appendChild(item);
+    });
+  }
+
+  function renderDashboardChart(iterations) {
+    if (!ui.dashboardChart) return;
+    const svg = ui.dashboardChart;
+    svg.innerHTML = "";
+    const consignes = state.dashboard?.data?.consignes || [];
+
+    if (!iterations.length || !consignes.length) {
+      const width = 480;
+      const height = 220;
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      const ns = "http://www.w3.org/2000/svg";
+      const text = document.createElementNS(ns, "text");
+      text.setAttribute("x", width / 2);
+      text.setAttribute("y", height / 2);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("fill", "#64748b");
+      text.textContent = "Aucune donnée à afficher";
+      svg.appendChild(text);
+      return;
+    }
+
+    const chronologicalIterations = [...iterations].reverse();
+    const width = Math.max(chronologicalIterations.length * 80, 520);
+    const height = 260;
+    const margin = { top: 24, right: 32, bottom: 40, left: 80 };
+    const chartWidth = Math.max(1, width - margin.left - margin.right);
+    const chartHeight = Math.max(1, height - margin.top - margin.bottom);
+    const ns = "http://www.w3.org/2000/svg";
+
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    const scores = Object.values(DASHBOARD_RESPONSE_MAP).map((config) => config.score);
+    const uniqueScores = Array.from(new Set(scores)).sort((a, b) => a - b);
+    const minScore = uniqueScores[0];
+    const maxScore = uniqueScores[uniqueScores.length - 1];
+    const span = Math.max(1, maxScore - minScore);
+
+    const scoreLabels = uniqueScores.reduce((acc, score) => {
+      const match = Object.values(DASHBOARD_RESPONSE_MAP).find((config) => config.score === score);
+      acc[score] = match ? match.label : `Niveau ${score}`;
+      return acc;
+    }, {});
+
+    const mapScoreToY = (score) => {
+      const ratio = (score - minScore) / span;
+      return margin.top + chartHeight - ratio * chartHeight;
+    };
+
+    const verticalAxis = document.createElementNS(ns, "line");
+    verticalAxis.setAttribute("x1", margin.left);
+    verticalAxis.setAttribute("x2", margin.left);
+    verticalAxis.setAttribute("y1", margin.top);
+    verticalAxis.setAttribute("y2", height - margin.bottom);
+    verticalAxis.setAttribute("class", "chart-axis");
+    svg.appendChild(verticalAxis);
+
+    const horizontalAxis = document.createElementNS(ns, "line");
+    horizontalAxis.setAttribute("x1", margin.left);
+    horizontalAxis.setAttribute("x2", width - margin.right);
+    horizontalAxis.setAttribute("y1", height - margin.bottom);
+    horizontalAxis.setAttribute("y2", height - margin.bottom);
+    horizontalAxis.setAttribute("class", "chart-axis");
+    svg.appendChild(horizontalAxis);
+
+    uniqueScores.forEach((score) => {
+      const y = mapScoreToY(score);
+      const grid = document.createElementNS(ns, "line");
+      grid.setAttribute("x1", margin.left);
+      grid.setAttribute("x2", width - margin.right);
+      grid.setAttribute("y1", y);
+      grid.setAttribute("y2", y);
+      grid.setAttribute("class", "chart-grid");
+      svg.appendChild(grid);
+
+      const label = document.createElementNS(ns, "text");
+      label.setAttribute("x", margin.left - 12);
+      label.setAttribute("y", y + 4);
+      label.setAttribute("text-anchor", "end");
+      label.textContent = scoreLabels[score] || `Niveau ${score}`;
+      svg.appendChild(label);
+    });
+
+    const xPositions = chronologicalIterations.map((iteration, index) => {
+      if (chronologicalIterations.length === 1) {
+        return margin.left + chartWidth / 2;
+      }
+      const ratio = index / (chronologicalIterations.length - 1);
+      return margin.left + ratio * chartWidth;
+    });
+
+    chronologicalIterations.forEach((iteration, index) => {
+      const x = xPositions[index];
+      const label = document.createElementNS(ns, "text");
+      label.setAttribute("x", x);
+      label.setAttribute("y", height - margin.bottom + 24);
+      label.setAttribute("text-anchor", "middle");
+      label.textContent = iteration;
+      svg.appendChild(label);
+    });
+
+    consignes.forEach((consigne, consigneIndex) => {
+      const color = getDashboardColor(consigne.id, consigneIndex);
+      const segments = [];
+      let currentSegment = [];
+
+      chronologicalIterations.forEach((iteration, index) => {
+        const responseKey = consigne.responses?.[iteration];
+        const config = responseKey ? DASHBOARD_RESPONSE_MAP[responseKey] : null;
+        if (!config) {
+          if (currentSegment.length) {
+            segments.push(currentSegment);
+            currentSegment = [];
+          }
+          return;
+        }
+        const point = {
+          x: xPositions[index],
+          y: mapScoreToY(config.score),
+          iteration,
+          label: config.label
+        };
+        currentSegment.push(point);
+      });
+
+      if (currentSegment.length) {
+        segments.push(currentSegment);
+      }
+
+      segments.forEach((segment) => {
+        if (segment.length > 1) {
+          const path = document.createElementNS(ns, "path");
+          let d = `M ${segment[0].x} ${segment[0].y}`;
+          for (let i = 1; i < segment.length; i += 1) {
+            d += ` L ${segment[i].x} ${segment[i].y}`;
+          }
+          path.setAttribute("d", d);
+          path.setAttribute("class", "chart-line");
+          path.setAttribute("stroke", color);
+          svg.appendChild(path);
+        }
+
+        segment.forEach((point) => {
+          const circle = document.createElementNS(ns, "circle");
+          circle.setAttribute("cx", point.x);
+          circle.setAttribute("cy", point.y);
+          circle.setAttribute("r", 4.5);
+          circle.setAttribute("fill", color);
+          circle.setAttribute("class", "chart-point");
+          circle.setAttribute(
+            "aria-label",
+            `${consigne.label} — ${point.label} (itération ${point.iteration})`
+          );
+          svg.appendChild(circle);
+        });
+      });
+    });
+  }
+
+  function renderDashboard() {
+    if (!state.dashboard) return;
+    updateDashboardPeriodButtons();
+    const iterations = getDashboardIterations();
+    renderDashboardTable(iterations);
+    renderDashboardLegend();
+    renderDashboardChart(iterations);
+  }
+
+  function initDashboard() {
+    if (!ui.dashboardPanel) return;
+    state.dashboard = {
+      data: DASHBOARD_SAMPLE_DATA,
+      period: DASHBOARD_DEFAULT_PERIOD,
+      colorByConsigne: new Map()
+    };
+    assignDashboardColors();
+    if (ui.dashboardPeriodButtons && ui.dashboardPeriodButtons.length) {
+      ui.dashboardPeriodButtons.forEach((button) => {
+        button.addEventListener("click", handleDashboardPeriodClick);
+      });
+    }
+    renderDashboard();
+  }
 
   showView(null);
   ui.logoutBtn.disabled = true;
