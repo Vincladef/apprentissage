@@ -4,101 +4,108 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Apprentissage actif</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      rel="icon"
-      type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' ry='6' fill='%23204770'/%3E%3Cpath d='M9 23h3l4-6 4 6h3l-5.5-8L23 9h-3l-4 5.8L12 9H9l5.5 8z' fill='%23ffffff'/%3E%3C/svg%3E"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="app-header">
-      <h1>Apprentissage actif</h1>
+      <div class="brand">
+        <h1>Apprentissage actif</h1>
+        <p class="subtitle">Des fiches simples, prêtes à apprendre.</p>
+      </div>
       <div class="header-actions">
         <span id="current-user" class="muted"></span>
         <button id="logout-btn" class="secondary">Se déconnecter</button>
       </div>
     </header>
 
-    <main>
+    <main class="app-main">
       <section id="login-screen" class="view active">
         <div class="card">
           <h2>Bienvenue !</h2>
-          <p>Choisissez un pseudo pour commencer vos révisions actives.</p>
+          <p>Choisissez un pseudo pour créer vos fiches d'apprentissage actives.</p>
           <form id="login-form" class="stack">
             <label for="pseudo">Pseudo</label>
-            <input id="pseudo" name="pseudo" type="text" required minlength="3" maxlength="32" />
-            <button type="submit">Entrer</button>
+            <input
+              id="pseudo"
+              name="pseudo"
+              type="text"
+              required
+              minlength="3"
+              maxlength="32"
+              autocomplete="nickname"
+              placeholder="ex.&nbsp;: astrofan"
+            />
+            <button type="submit">Commencer</button>
           </form>
+          <p class="muted small">
+            Astuce : vous pouvez revenir plus tard avec le même pseudo pour retrouver vos fiches.
+          </p>
         </div>
       </section>
 
-      <section id="dashboard-screen" class="view hidden">
-        <div class="toolbar">
-          <h2>Mes cours</h2>
-          <form id="new-course-form" class="inline">
-            <input type="text" id="new-course-name" placeholder="Nom du cours" required />
-            <button type="submit">Créer</button>
-          </form>
-        </div>
-        <div id="courses-list" class="cards"></div>
-      </section>
-
-      <section id="course-screen" class="view hidden">
-        <div class="toolbar course-toolbar">
-          <button id="back-to-dashboard" class="secondary">Retour</button>
-          <div class="course-title-area">
-            <h2 id="course-title"></h2>
-            <button id="new-iteration-btn" class="secondary">Nouvelle itération</button>
-          </div>
-        </div>
-        <div class="course-layout">
-          <aside class="sidebar">
-            <div class="sidebar-header">
-              <h3>Structure</h3>
-              <button id="add-root-page" class="secondary">Ajouter un chapitre</button>
+      <section id="workspace" class="view hidden">
+        <div class="workspace">
+          <aside class="note-list">
+            <div class="note-list-header">
+              <div>
+                <h2>Mes fiches</h2>
+                <p class="muted small">Tout est enregistré automatiquement.</p>
+              </div>
+              <button id="add-note-btn">Nouvelle fiche</button>
             </div>
-            <form id="add-page-form" class="stack">
-              <label for="page-title-input">Titre</label>
-              <input id="page-title-input" type="text" required />
-              <label for="parent-select">Parent</label>
-              <select id="parent-select"></select>
-              <button type="submit">Ajouter une page</button>
-            </form>
-            <div id="pages-tree" class="tree"></div>
+            <div id="notes-container" class="notes-container"></div>
           </aside>
-          <section class="content-area">
-            <div class="mode-switch">
-              <button id="editor-tab" class="tab active" data-target="editor-view">Éditeur</button>
-              <button id="revision-tab" class="tab" data-target="revision-view">Mode révision</button>
+
+          <section class="editor-area">
+            <div id="empty-note" class="empty-state">
+              <h2>Commencez par créer une fiche</h2>
+              <p>Ajoutez une fiche à gauche puis rédigez vos contenus ici.</p>
             </div>
-            <div id="page-empty" class="empty-state">Sélectionnez une page pour commencer.</div>
-            <div id="editor-view" class="panel hidden">
-              <div class="editor-toolbar">
-                <button type="button" data-command="bold"><span>Gras</span></button>
-                <button type="button" data-command="italic"><span>Italique</span></button>
-                <button type="button" data-command="insertUnorderedList"><span>Liste</span></button>
-                <button type="button" data-command="formatBlock" data-value="h2"><span>Titre</span></button>
-                <button type="button" id="insert-image-btn"><span>Image</span></button>
-                <button type="button" id="create-cloze-btn"><span>Texte à trou</span></button>
-                <button type="button" id="remove-cloze-btn"><span>Retirer le trou</span></button>
+
+            <div id="editor-wrapper" class="editor-wrapper hidden" aria-live="polite">
+              <div class="editor-header">
+                <input
+                  id="note-title"
+                  type="text"
+                  placeholder="Titre de la fiche"
+                  aria-label="Titre de la fiche"
+                />
+                <span id="save-status" class="save-status muted"></span>
               </div>
-              <div id="editor" contenteditable="true" class="editor" aria-label="Éditeur de cours"></div>
-              <div class="editor-actions">
-                <button id="save-page-btn">Enregistrer</button>
-                <span id="save-status" class="muted"></span>
+              <div class="editor-toolbar" aria-label="Outils de mise en forme">
+                <button type="button" class="ghost" data-command="bold" title="Gras (Ctrl+B)">
+                  <span>Gras</span>
+                </button>
+                <button type="button" class="ghost" data-command="italic" title="Italique (Ctrl+I)">
+                  <span>Italique</span>
+                </button>
+                <button type="button" class="ghost" data-command="insertUnorderedList" title="Liste">
+                  <span>Liste</span>
+                </button>
+                <button type="button" class="ghost" data-command="formatBlock" data-value="h2" title="Sous-titre">
+                  <span>Sous-titre</span>
+                </button>
               </div>
-            </div>
-            <div id="revision-view" class="panel hidden">
-              <div id="revision-content" class="revision"></div>
-              <p class="muted">Cliquez sur un trou pour révéler la réponse puis évaluez votre réussite.</p>
+              <div
+                id="note-editor"
+                class="editor"
+                contenteditable="true"
+                aria-label="Contenu de la fiche"
+                spellcheck="true"
+              ></div>
             </div>
           </section>
         </div>
       </section>
     </main>
 
-    <div id="toast" class="toast hidden"></div>
+    <div id="toast" class="toast hidden" role="status" aria-live="assertive"></div>
 
     <script type="module" src="app.js"></script>
   </body>
