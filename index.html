@@ -109,55 +109,8 @@
                 </div>
               </div>
               <div class="editor-toolbar" aria-label="Outils de mise en forme">
-                <div class="toolbar-primary-row">
-                  <div class="toolbar-group toolbar-group--primary">
-                    <label class="toolbar-select">
-                      <span class="sr-only">Style de texte</span>
-                      <select id="block-format" data-command="formatBlock" aria-label="Style de texte">
-                        <option value="p" selected>Normal</option>
-                        <option value="h1">Titre 1</option>
-                      <option value="h2">Titre 2</option>
-                      <option value="h3">Titre 3</option>
-                      <option value="blockquote">Citation</option>
-                    </select>
-                  </label>
-                  <label class="toolbar-select">
-                    <span class="sr-only">Police</span>
-                    <select id="font-family" data-command="fontName" aria-label="Police">
-                      <option value="Arial" selected>Arial</option>
-                      <option value="Georgia">Georgia</option>
-                      <option value="Inter">Inter</option>
-                      <option value="Times New Roman">Times New Roman</option>
-                      <option value="Trebuchet MS">Trebuchet</option>
-                      <option value="Verdana">Verdana</option>
-                    </select>
-                  </label>
-                    <div class="font-size-control" role="group" aria-label="Taille du texte">
-                      <button type="button" class="toolbar-button" data-action="decreaseFontSize" title="Diminuer la taille">
-                        <span aria-hidden="true">−</span>
-                        <span class="sr-only">Diminuer la taille</span>
-                      </button>
-                      <span id="font-size-value" aria-live="polite">11</span>
-                      <button type="button" class="toolbar-button" data-action="increaseFontSize" title="Augmenter la taille">
-                        <span aria-hidden="true">+</span>
-                        <span class="sr-only">Augmenter la taille</span>
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="toolbar-button toolbar-more-button"
-                    id="toolbar-more-btn"
-                    aria-haspopup="true"
-                    aria-expanded="false"
-                    aria-controls="toolbar-more-panel"
-                  >
-                    <span class="icon" aria-hidden="true">☰</span>
-                    <span>Autres outils</span>
-                  </button>
-                </div>
-                <div class="toolbar-more-panel" id="toolbar-more-panel">
-                  <div class="toolbar-group">
+                <div class="toolbar-quick-actions" role="toolbar" aria-label="Raccourcis de mise en forme">
+                  <div class="toolbar-group toolbar-group--quick">
                     <button type="button" class="toolbar-button" data-command="bold" title="Gras (Ctrl+B)">
                       <span class="icon" aria-hidden="true">B</span>
                       <span class="sr-only">Gras</span>
@@ -171,7 +124,17 @@
                       <span class="sr-only">Souligner</span>
                     </button>
                   </div>
-                  <div class="toolbar-group">
+                  <div class="toolbar-group toolbar-group--quick">
+                    <button type="button" class="toolbar-button" data-command="insertUnorderedList" title="Liste à puces">
+                      <span class="icon" aria-hidden="true">•</span>
+                      <span class="sr-only">Liste à puces</span>
+                    </button>
+                    <button type="button" class="toolbar-button" data-command="insertOrderedList" title="Liste numérotée">
+                      <span class="icon" aria-hidden="true">1.</span>
+                      <span class="sr-only">Liste numérotée</span>
+                    </button>
+                  </div>
+                  <div class="toolbar-group toolbar-group--quick">
                     <button
                       type="button"
                       class="toolbar-button color-tool"
@@ -188,6 +151,56 @@
                       <span class="color-bar highlight" aria-hidden="true"></span>
                       <span class="sr-only">Surligner la sélection</span>
                     </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="toolbar-button toolbar-more-button"
+                    id="toolbar-more-btn"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                    aria-controls="toolbar-more-panel"
+                    title="Afficher plus d’options"
+                  >
+                    <span class="icon" aria-hidden="true">⋮</span>
+                    <span class="sr-only">Plus d’outils</span>
+                  </button>
+                </div>
+                <div class="toolbar-more-panel" id="toolbar-more-panel">
+                  <div class="toolbar-group toolbar-group--primary">
+                    <label class="toolbar-select">
+                      <span class="sr-only">Style de texte</span>
+                      <select id="block-format" data-command="formatBlock" aria-label="Style de texte">
+                        <option value="p" selected>Normal</option>
+                        <option value="h1">Titre 1</option>
+                        <option value="h2">Titre 2</option>
+                        <option value="h3">Titre 3</option>
+                        <option value="blockquote">Citation</option>
+                      </select>
+                    </label>
+                    <label class="toolbar-select">
+                      <span class="sr-only">Police</span>
+                      <select id="font-family" data-command="fontName" aria-label="Police">
+                        <option value="Arial" selected>Arial</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Inter">Inter</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Trebuchet MS">Trebuchet</option>
+                        <option value="Verdana">Verdana</option>
+                      </select>
+                    </label>
+                    <div class="font-size-control" role="group" aria-label="Taille du texte">
+                      <button type="button" class="toolbar-button" data-action="decreaseFontSize" title="Diminuer la taille">
+                        <span aria-hidden="true">−</span>
+                        <span class="sr-only">Diminuer la taille</span>
+                      </button>
+                      <span id="font-size-value" aria-live="polite">11</span>
+                      <button type="button" class="toolbar-button" data-action="increaseFontSize" title="Augmenter la taille">
+                        <span aria-hidden="true">+</span>
+                        <span class="sr-only">Augmenter la taille</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="toolbar-group toolbar-group--advanced">
                     <button type="button" class="toolbar-button" data-action="createCloze" title="Transformer la sélection en trou">
                       <span class="icon" aria-hidden="true">[…]</span>
                       <span class="sr-only">Créer un trou</span>
@@ -201,16 +214,6 @@
                     >
                       <span class="icon" aria-hidden="true">🔁</span>
                       <span>Nouvelle itération</span>
-                    </button>
-                  </div>
-                  <div class="toolbar-group">
-                    <button type="button" class="toolbar-button" data-command="insertUnorderedList" title="Liste à puces">
-                      <span class="icon" aria-hidden="true">•</span>
-                      <span class="sr-only">Liste à puces</span>
-                    </button>
-                    <button type="button" class="toolbar-button" data-command="insertOrderedList" title="Liste numérotée">
-                      <span class="icon" aria-hidden="true">1.</span>
-                      <span class="sr-only">Liste numérotée</span>
                     </button>
                     <button type="button" class="toolbar-button" data-command="removeFormat" title="Effacer la mise en forme">
                       <span class="icon" aria-hidden="true">⨯</span>
