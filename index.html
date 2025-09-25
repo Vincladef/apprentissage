@@ -19,11 +19,13 @@
         <button
           type="button"
           id="mobile-notes-btn"
-          class="header-icon-button mobile-only"
+          class="header-icon-button"
           aria-label="Afficher les fiches"
           aria-pressed="false"
+          aria-expanded="true"
         >
           ☰
+          <span class="sr-only">Afficher les fiches</span>
         </button>
         <div class="brand-text">
           <h1>Apprentissage actif</h1>
@@ -82,15 +84,6 @@
                 <p class="muted small">Tout est enregistré automatiquement.</p>
               </div>
               <div class="note-list-actions">
-                <button
-                  type="button"
-                  id="toggle-sidebar"
-                  class="icon-button ghost"
-                  aria-expanded="true"
-                  aria-label="Réduire la liste des fiches"
-                >
-                  <span aria-hidden="true">⟷</span>
-                </button>
                 <button id="add-note-btn" type="button">Nouvelle fiche</button>
               </div>
             </div>
