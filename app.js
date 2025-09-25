@@ -217,6 +217,36 @@ function bootstrapApp() {
   const workspaceLayout = document.querySelector(".workspace");
   const bodyElement = document.body;
   const rootElement = document.documentElement;
+  const headerElement = document.querySelector(".app-header");
+
+  let lastHeaderHeight = 0;
+
+  function updateToolbarOffsets() {
+    if (!rootElement || !headerElement) {
+      return;
+    }
+    const headerRect = headerElement.getBoundingClientRect();
+    const height = Math.round(headerRect.height);
+    if (!height && lastHeaderHeight === 0) {
+      return;
+    }
+    if (height === lastHeaderHeight) {
+      return;
+    }
+    lastHeaderHeight = height;
+    rootElement.style.setProperty("--header-height", `${height}px`);
+  }
+
+  updateToolbarOffsets();
+
+  let headerResizeObserver;
+  if (typeof ResizeObserver === "function" && headerElement) {
+    headerResizeObserver = new ResizeObserver(() => updateToolbarOffsets());
+    headerResizeObserver.observe(headerElement);
+  } else {
+    window.addEventListener("resize", updateToolbarOffsets, { passive: true });
+  }
+  window.addEventListener("orientationchange", updateToolbarOffsets, { passive: true });
 
   const SCROLL_COLLAPSE_THRESHOLD = 24;
 
