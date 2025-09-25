@@ -1200,10 +1200,33 @@ body.notes-drawer-open .drawer-overlay {
 
   .toolbar-row {
     gap: 0.45rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+    margin: 0 -0.2rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .toolbar-row::-webkit-scrollbar {
+    display: none;
   }
 
   .toolbar-group {
     gap: 0.35rem;
+    width: auto;
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .toolbar-group.toolbar-group--primary {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .toolbar-group.toolbar-group--advanced {
+    flex-wrap: nowrap;
   }
 
   .toolbar-group .toolbar-button {
@@ -1213,7 +1236,17 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .toolbar-select {
-    min-width: 0;
+    min-width: 120px;
+    flex: 0 0 auto;
+  }
+
+  .toolbar-select select {
+    font-size: 0.9rem;
+  }
+
+  .font-size-control {
+    min-width: 110px;
+    flex: 0 0 auto;
   }
 
   .editor {
