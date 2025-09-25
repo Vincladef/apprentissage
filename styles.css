@@ -313,9 +313,55 @@ input[type="text"]:focus {
 }
 
 .editor-toolbar {
-  display: inline-flex;
-  gap: 0.5rem;
+  display: flex;
   flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(59, 130, 246, 0.08));
+  border-radius: 1rem;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+}
+
+.toolbar-group {
+  display: inline-flex;
+  gap: 0.45rem;
+  padding-right: 0.75rem;
+  border-right: 1px solid rgba(31, 42, 68, 0.08);
+  margin-right: 0.35rem;
+}
+
+.toolbar-group:last-child {
+  border-right: none;
+  margin-right: 0;
+  padding-right: 0;
+}
+
+.editor-toolbar button {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 0.9rem;
+  border: 1px solid rgba(79, 70, 229, 0.15);
+  box-shadow: none;
+  color: var(--fg);
+  padding: 0.45rem 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.editor-toolbar button:hover {
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.editor-toolbar .toolbar-toggle[aria-pressed="true"] {
+  background: rgba(79, 70, 229, 0.18);
+  border-color: rgba(79, 70, 229, 0.35);
+  color: var(--accent-strong);
+}
+
+.editor-toolbar .toolbar-toggle[aria-pressed="true"] span::before {
+  content: "✓ ";
+  font-weight: 600;
 }
 
 .editor {
@@ -331,6 +377,59 @@ input[type="text"]:focus {
 
 .editor:focus {
   outline: 3px solid rgba(79, 70, 229, 0.18);
+}
+
+.editor h2 {
+  font-size: 1.35rem;
+  margin: 1.5rem 0 0.75rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.editor blockquote {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid rgba(79, 70, 229, 0.55);
+  background: rgba(79, 70, 229, 0.08);
+  border-radius: 0.9rem;
+}
+
+.editor ul,
+.editor ol {
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+
+.editor mark,
+.editor span[style*="background-color"] {
+  border-radius: 0.4rem;
+  padding: 0 0.2rem;
+}
+
+.editor .cloze {
+  background: rgba(79, 70, 229, 0.15);
+  color: var(--accent-strong);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.45rem;
+  font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.editor .cloze:hover {
+  background: rgba(79, 70, 229, 0.25);
+}
+
+.editor.cloze-hidden .cloze {
+  color: transparent;
+  position: relative;
+  background: rgba(31, 42, 68, 0.08);
+}
+
+.editor.cloze-hidden .cloze::after {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  font-weight: 500;
 }
 
 .empty-state {

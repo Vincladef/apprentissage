@@ -79,18 +79,54 @@
                 <span id="save-status" class="save-status muted"></span>
               </div>
               <div class="editor-toolbar" aria-label="Outils de mise en forme">
-                <button type="button" class="ghost" data-command="bold" title="Gras (Ctrl+B)">
-                  <span>Gras</span>
-                </button>
-                <button type="button" class="ghost" data-command="italic" title="Italique (Ctrl+I)">
-                  <span>Italique</span>
-                </button>
-                <button type="button" class="ghost" data-command="insertUnorderedList" title="Liste">
-                  <span>Liste</span>
-                </button>
-                <button type="button" class="ghost" data-command="formatBlock" data-value="h2" title="Sous-titre">
-                  <span>Sous-titre</span>
-                </button>
+                <div class="toolbar-group">
+                  <button type="button" class="ghost" data-command="bold" title="Gras (Ctrl+B)">
+                    <span>Gras</span>
+                  </button>
+                  <button type="button" class="ghost" data-command="italic" title="Italique (Ctrl+I)">
+                    <span>Italique</span>
+                  </button>
+                  <button type="button" class="ghost" data-command="underline" title="Souligné (Ctrl+U)">
+                    <span>Souligner</span>
+                  </button>
+                </div>
+                <div class="toolbar-group">
+                  <button type="button" class="ghost" data-command="insertUnorderedList" title="Liste à puces">
+                    <span>Liste</span>
+                  </button>
+                  <button type="button" class="ghost" data-command="insertOrderedList" title="Liste numérotée">
+                    <span>Liste 1.</span>
+                  </button>
+                  <button type="button" class="ghost" data-command="formatBlock" data-value="blockquote" title="Citation">
+                    <span>Citation</span>
+                  </button>
+                  <button type="button" class="ghost" data-command="formatBlock" data-value="h2" title="Sous-titre">
+                    <span>Sous-titre</span>
+                  </button>
+                </div>
+                <div class="toolbar-group">
+                  <button type="button" class="ghost" data-action="applyHighlight" title="Surligner en jaune">
+                    <span>Surligner</span>
+                  </button>
+                  <button type="button" class="ghost" data-action="createCloze" title="Transformer la sélection en trou">
+                    <span>Créer un trou</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="ghost toolbar-toggle"
+                    id="toggle-cloze-btn"
+                    data-action="toggleClozeVisibility"
+                    aria-pressed="false"
+                    title="Masquer temporairement le texte des trous"
+                  >
+                    <span>Masquer les trous</span>
+                  </button>
+                </div>
+                <div class="toolbar-group">
+                  <button type="button" class="ghost" data-command="removeFormat" title="Effacer la mise en forme">
+                    <span>Effacer</span>
+                  </button>
+                </div>
               </div>
               <div
                 id="note-editor"

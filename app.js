@@ -96,6 +96,8 @@ function bootstrapApp() {
   const AUTH_PASSWORD_SUFFIX = "#appr";
   const MIN_PSEUDO_LENGTH = 3;
   const SAVE_DEBOUNCE_MS = 700;
+  const HIGHLIGHT_COLOR = "#fde68a";
+  const CLOZE_PLACEHOLDER_CHAR = "▢";
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -116,7 +118,8 @@ function bootstrapApp() {
     pendingSelectionId: null,
     pendingSave: null,
     hasUnsavedChanges: false,
-    lastSavedAt: null
+    lastSavedAt: null,
+    clozeHidden: false
   };
 
   const views = {
@@ -138,10 +141,12 @@ function bootstrapApp() {
     editorWrapper: document.getElementById("editor-wrapper"),
     emptyState: document.getElementById("empty-note"),
     toast: document.getElementById("toast"),
-    toolbar: document.querySelector(".editor-toolbar")
+    toolbar: document.querySelector(".editor-toolbar"),
+    toggleClozeBtn: document.getElementById("toggle-cloze-btn")
   };
 
   ui.logoutBtn.disabled = true;
+  updateClozeToggleButton();
 
   function showView(name) {
     Object.entries(views).forEach(([key, section]) => {
@@ -274,24 +279,43 @@ function bootstrapApp() {
     ui.emptyState.classList.remove("hidden");
     ui.noteTitle.value = "";
     ui.noteEditor.innerHTML = "";
+    ui.noteEditor.classList.remove("cloze-hidden");
     updateSaveStatus();
   }
 
-  function applyCurrentNoteToEditor() {
+  function applyCurrentNoteToEditor(options = {}) {
+    const { force = false } = options;
     if (!state.currentNote) {
       showEmptyEditor();
       return;
     }
     ui.emptyState.classList.add("hidden");
     ui.editorWrapper.classList.remove("hidden");
-    ui.noteTitle.value = state.currentNote.title || "";
-    ui.noteEditor.innerHTML = state.currentNote.contentHtml || "";
+    const desiredTitle = state.currentNote.title || "";
+    if (force || ui.noteTitle.value !== desiredTitle) {
+      ui.noteTitle.value = desiredTitle;
+    }
+
+    const desiredHtml = state.currentNote.contentHtml || "";
+    const isFocused = document.activeElement === ui.noteEditor;
+    const shouldUpdateContent =
+      force || ((!isFocused || !state.hasUnsavedChanges) && ui.noteEditor.innerHTML !== desiredHtml);
+    if (shouldUpdateContent) {
+      const selection = isFocused ? captureSelection(ui.noteEditor) : null;
+      ui.noteEditor.innerHTML = desiredHtml;
+      if (selection) {
+        restoreSelection(ui.noteEditor, selection);
+      }
+    }
+
     state.lastSavedAt = state.currentNote.updatedAt instanceof Date ? state.currentNote.updatedAt : null;
     if (state.hasUnsavedChanges) {
       updateSaveStatus("dirty");
     } else {
       updateSaveStatus(state.lastSavedAt ? "saved" : "", state.lastSavedAt || null);
     }
+    ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
+    updateClozeToggleButton();
   }
 
   function updateActiveNoteHighlight() {
@@ -388,9 +412,13 @@ function bootstrapApp() {
     if (state.currentNoteId) {
       const current = state.notes.find((note) => note.id === state.currentNoteId);
       if (current) {
-        state.currentNote = { ...current };
-        state.hasUnsavedChanges = false;
-        applyCurrentNoteToEditor();
+        if (!state.hasUnsavedChanges || !state.currentNote) {
+          state.currentNote = { ...current };
+          state.hasUnsavedChanges = false;
+          applyCurrentNoteToEditor({ force: true });
+        } else {
+          updateSaveStatus("dirty");
+        }
         updateActiveNoteHighlight();
         return;
       }
@@ -416,7 +444,7 @@ function bootstrapApp() {
     state.currentNoteId = note.id;
     state.currentNote = { ...note };
     state.hasUnsavedChanges = false;
-    applyCurrentNoteToEditor();
+    applyCurrentNoteToEditor({ force: true });
     updateActiveNoteHighlight();
     setTimeout(() => ui.noteTitle.focus(), 80);
   }
@@ -460,6 +488,71 @@ function bootstrapApp() {
     state.hasUnsavedChanges = true;
     updateSaveStatus("dirty");
     scheduleSave();
+  }
+
+  function captureSelection(container) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) {
+      return null;
+    }
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(container);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    const start = preRange.toString().length;
+    return { start, end: start + range.toString().length };
+  }
+
+  function restoreSelection(container, saved) {
+    if (!saved) return;
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    let charIndex = 0;
+    let startNode = null;
+    let endNode = null;
+    let startOffset = 0;
+    let endOffset = 0;
+
+    const traverse = (node) => {
+      if (endNode) return;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const nextCharIndex = charIndex + node.length;
+        if (!startNode && saved.start >= charIndex && saved.start <= nextCharIndex) {
+          startNode = node;
+          startOffset = saved.start - charIndex;
+        }
+        if (!endNode && saved.end >= charIndex && saved.end <= nextCharIndex) {
+          endNode = node;
+          endOffset = saved.end - charIndex;
+        }
+        charIndex = nextCharIndex;
+      } else {
+        for (let i = 0; i < node.childNodes.length; i += 1) {
+          traverse(node.childNodes[i]);
+          if (endNode) {
+            break;
+          }
+        }
+      }
+    };
+
+    traverse(container);
+
+    if (!startNode) {
+      startNode = container;
+      startOffset = container.childNodes.length;
+    }
+    if (!endNode) {
+      endNode = startNode;
+      endOffset = startOffset;
+    }
+
+    range.setStart(startNode, Math.max(0, startOffset));
+    range.setEnd(endNode, Math.max(0, endOffset));
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   function scheduleSave() {
@@ -516,13 +609,87 @@ function bootstrapApp() {
     }
   }
 
+  function applyHighlight() {
+    const supportHilite =
+      typeof document.queryCommandSupported === "function" && document.queryCommandSupported("hiliteColor");
+    const command = supportHilite ? "hiliteColor" : "backColor";
+    document.execCommand(command, false, HIGHLIGHT_COLOR);
+    handleEditorInput();
+  }
+
+  function generateClozePlaceholder(rawText) {
+    const condensed = (rawText || "").replace(/\s+/g, "").trim();
+    if (!condensed) return "…";
+    const length = Math.max(3, Math.min(condensed.length, 12));
+    return CLOZE_PLACEHOLDER_CHAR.repeat(length);
+  }
+
+  function createClozeFromSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      showToast("Sélectionnez du texte à transformer en trou.", "warning");
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) {
+      showToast("Sélectionnez le texte à masquer pour créer un trou.", "warning");
+      return;
+    }
+    if (!ui.noteEditor.contains(range.commonAncestorContainer)) {
+      showToast("Les trous ne peuvent être créés que dans l'éditeur.", "warning");
+      return;
+    }
+
+    const wrapper = document.createElement("span");
+    wrapper.className = "cloze";
+    const placeholder = generateClozePlaceholder(range.toString());
+    wrapper.dataset.placeholder = placeholder;
+
+    const fragment = range.extractContents();
+    wrapper.appendChild(fragment);
+    range.insertNode(wrapper);
+    selection.removeAllRanges();
+    selection.selectAllChildren(wrapper);
+    ui.noteEditor.focus();
+    handleEditorInput();
+  }
+
+  function toggleClozeVisibility() {
+    state.clozeHidden = !state.clozeHidden;
+    ui.noteEditor.classList.toggle("cloze-hidden", state.clozeHidden);
+    updateClozeToggleButton();
+    ui.noteEditor.focus();
+  }
+
+  function updateClozeToggleButton() {
+    if (!ui.toggleClozeBtn) return;
+    ui.toggleClozeBtn.setAttribute("aria-pressed", state.clozeHidden ? "true" : "false");
+    const label = ui.toggleClozeBtn.querySelector("span");
+    if (!label) return;
+    label.textContent = state.clozeHidden ? "Afficher les trous" : "Masquer les trous";
+  }
+
   function handleToolbarClick(event) {
-    const button = event.target.closest("button[data-command]");
+    const button = event.target.closest("button[data-command], button[data-action]");
     if (!button || !state.currentNote) return;
     const command = button.dataset.command;
-    if (!command) return;
-    const value = button.dataset.value || null;
-    document.execCommand(command, false, value);
+    const action = button.dataset.action;
+    if (command) {
+      let value = button.dataset.value || null;
+      if (command === "formatBlock" && value && !/^</.test(value)) {
+        value = `<${value}>`;
+      }
+      document.execCommand(command, false, value);
+      handleEditorInput();
+    } else if (action) {
+      if (action === "applyHighlight") {
+        applyHighlight();
+      } else if (action === "createCloze") {
+        createClozeFromSelection();
+      } else if (action === "toggleClozeVisibility") {
+        toggleClozeVisibility();
+      }
+    }
     ui.noteEditor.focus();
   }
 
@@ -616,10 +783,12 @@ function bootstrapApp() {
     state.pendingSelectionId = null;
     state.hasUnsavedChanges = false;
     state.lastSavedAt = null;
+    state.clozeHidden = false;
     ui.notesContainer.innerHTML = "";
     showEmptyEditor();
     ui.currentUser.textContent = "";
     ui.logoutBtn.disabled = true;
+    updateClozeToggleButton();
   }
 
   async function handleLoginSubmit(event) {
