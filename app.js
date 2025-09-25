@@ -723,11 +723,21 @@ function bootstrapApp() {
     return normalizeClozePoints(cloze.dataset.points);
   }
 
+  function updateClozeMaskState(cloze, shouldMask) {
+    if (!cloze) return;
+    cloze.classList.remove("cloze-revealed");
+    if (shouldMask) {
+      cloze.classList.add("cloze-masked");
+    } else {
+      cloze.classList.remove("cloze-masked");
+    }
+  }
+
   function setClozePoints(cloze, points) {
     if (!cloze) return 0;
     const normalized = normalizeClozePoints(points);
     cloze.dataset.points = formatClozePoints(normalized);
-    cloze.classList.toggle("cloze-masked", normalized <= 0);
+    updateClozeMaskState(cloze, normalized <= 0);
     updateClozeTooltip(cloze, normalized);
     return normalized;
   }
@@ -754,9 +764,6 @@ function bootstrapApp() {
       cloze.setAttribute("contenteditable", "false");
     } else {
       cloze.removeAttribute("contenteditable");
-    }
-    if (points > 0) {
-      cloze.classList.remove("cloze-revealed");
     }
   }
 
