@@ -952,17 +952,24 @@ function bootstrapApp() {
       if (!mobileMediaQuery.matches) {
         ui.toolbarMorePanel.classList.remove("is-open");
         ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
+        ui.toolbarMorePanel.removeAttribute("aria-hidden");
         document.removeEventListener("click", handleToolbarOutsideClick);
         return;
       }
       if (!isOpen) {
         ui.toolbarMorePanel.classList.add("is-open");
       }
+      ui.toolbarMorePanel.removeAttribute("aria-hidden");
       ui.toolbarMoreBtn.setAttribute("aria-expanded", "true");
       document.addEventListener("click", handleToolbarOutsideClick);
     } else {
       if (isOpen) {
         ui.toolbarMorePanel.classList.remove("is-open");
+      }
+      if (mobileMediaQuery.matches) {
+        ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
+      } else {
+        ui.toolbarMorePanel.removeAttribute("aria-hidden");
       }
       ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
       document.removeEventListener("click", handleToolbarOutsideClick);
