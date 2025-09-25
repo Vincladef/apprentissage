@@ -129,6 +129,7 @@ function bootstrapApp() {
       toastType: "error"
     }
   };
+  const CLOZE_DEFER_DATA_KEY = "deferMask";
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -723,6 +724,16 @@ function bootstrapApp() {
     return normalizeClozePoints(cloze.dataset.points);
   }
 
+  function shouldMaskCloze(cloze, pointsValue = null) {
+    if (!cloze) return true;
+    if (cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1") {
+      return false;
+    }
+    const points =
+      pointsValue === null ? getClozePoints(cloze) : normalizeClozePoints(pointsValue);
+    return points <= 0;
+  }
+
   function updateClozeMaskState(cloze, shouldMask) {
     if (!cloze) return;
     cloze.classList.remove("cloze-revealed");
@@ -737,7 +748,8 @@ function bootstrapApp() {
     if (!cloze) return 0;
     const normalized = normalizeClozePoints(points);
     cloze.dataset.points = formatClozePoints(normalized);
-    updateClozeMaskState(cloze, normalized <= 0);
+    const shouldMask = shouldMaskCloze(cloze, normalized);
+    updateClozeMaskState(cloze, shouldMask);
     updateClozeTooltip(cloze, normalized);
     return normalized;
   }
@@ -760,7 +772,7 @@ function bootstrapApp() {
       cloze.dataset.placeholder = generateClozePlaceholder();
     }
     const points = setClozePoints(cloze, getClozePoints(cloze));
-    if (points <= 0) {
+    if (shouldMaskCloze(cloze, points)) {
       cloze.setAttribute("contenteditable", "false");
     } else {
       cloze.removeAttribute("contenteditable");
@@ -824,16 +836,31 @@ function bootstrapApp() {
 
     let changed = false;
     let reactivatedCount = 0;
+    let skippedCount = 0;
 
     clozes.forEach((cloze) => {
+      const hadDeferred = cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1";
+      if (hadDeferred) {
+        delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
+        changed = true;
+        reactivatedCount += 1;
+      }
+
       const current = getClozePoints(cloze);
-      const next = Math.max(0, current - 1);
+      let next = current;
+
+      if (current > 0) {
+        skippedCount += 1;
+        next = Math.max(0, current - 1);
+        if (next === 0) {
+          cloze.dataset[CLOZE_DEFER_DATA_KEY] = "1";
+        }
+      }
+
       if (next !== current) {
         changed = true;
       }
-      if (current > 0 && next === 0) {
-        reactivatedCount += 1;
-      }
+
       setClozePoints(cloze, next);
       cloze.classList.remove("cloze-revealed");
     });
@@ -842,12 +869,19 @@ function bootstrapApp() {
 
     if (changed) {
       handleEditorInput();
+      const messages = [];
       if (reactivatedCount > 0) {
         const plural = reactivatedCount > 1 ? "s" : "";
-        showToast(`Nouvelle itération : ${reactivatedCount} trou${plural} à réviser de nouveau.`, "success");
-      } else {
-        showToast("Nouvelle itération : compteurs mis à jour.", "success");
+        messages.push(`${reactivatedCount} trou${plural} reviennent en révision.`);
       }
+      if (skippedCount > 0) {
+        const pluralSkip = skippedCount > 1 ? "s" : "";
+        messages.push(`${skippedCount} trou${pluralSkip} mis en pause pour cette itération.`);
+      }
+      const combinedMessage = messages.length
+        ? messages.join(" ")
+        : "Compteurs mis à jour.";
+      showToast(`Nouvelle itération : ${combinedMessage}`, "success");
     } else {
       showToast("Nouvelle itération : aucun compteur à réduire.", "info");
     }
@@ -962,6 +996,9 @@ function bootstrapApp() {
 
     const currentPoints = getClozePoints(cloze);
     const newPoints = feedback.reset ? 0 : currentPoints + (feedback.delta || 0);
+    if (feedback.reset && cloze.dataset[CLOZE_DEFER_DATA_KEY]) {
+      delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
+    }
     const appliedPoints = setClozePoints(cloze, newPoints);
     refreshClozeElement(cloze);
     handleEditorInput();
