@@ -394,7 +394,7 @@ function bootstrapApp() {
     state.currentNote = { ...state.pendingRemoteNote };
     state.pendingRemoteNote = null;
     state.hasUnsavedChanges = false;
-    applyCurrentNoteToEditor({ force: true });
+    applyCurrentNoteToEditor();
   }
 
   function updateActiveNoteHighlight() {
