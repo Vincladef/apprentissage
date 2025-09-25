@@ -11,7 +11,7 @@
   --success: #188038;
   --warning: #f9ab00;
   --header-height: 4rem;
-  --toolbar-offset: calc(var(--header-height) + 0.5rem);
+  --toolbar-offset: var(--header-height);
   font-family: "Inter", "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -124,6 +124,9 @@ input[type="text"]:focus {
 
 
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -480,27 +483,8 @@ input[type="text"]:focus {
   gap: 0.35rem;
 }
 
-.editor-header-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-#restore-sidebar-btn {
-  display: inline-flex;
-}
-
-.editor-header-actions .icon-button {
-  padding: 0.35rem 0.55rem;
-}
-
 .editor-header-main .save-status {
   justify-self: end;
-}
-
-.editor-header-actions .icon-button span[aria-hidden="true"] {
-  font-size: 1.1rem;
-  line-height: 1;
 }
 
 .editor-toolbar {
