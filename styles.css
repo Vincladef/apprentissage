@@ -32,30 +32,6 @@ body.notes-drawer-open {
   overflow: hidden;
 }
 
-body.focus-mode {
-  --toolbar-offset: 1.25rem;
-}
-
-body.focus-mode .app-header {
-  transform: translateY(-120%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-body.focus-mode .app-main {
-  padding-top: 1rem;
-}
-
-body.focus-mode .workspace {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-body.focus-mode .note-list {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-2rem);
-}
-
 h1,
 h2,
 h3,
@@ -156,10 +132,6 @@ input[type="text"]:focus {
   background: #ffffff;
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
-  position: sticky;
-  top: 0;
-  z-index: 12;
-  transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 .brand h1 {
@@ -210,10 +182,6 @@ input[type="text"]:focus {
 .header-icon-button[aria-pressed="true"] {
   background: rgba(26, 115, 232, 0.18);
   color: var(--accent-strong);
-}
-
-.mobile-only {
-  display: none;
 }
 
 .header-actions {
@@ -1019,10 +987,6 @@ body.notes-drawer-open .drawer-overlay {
     font-size: 0.85rem;
   }
 
-  .mobile-only {
-    display: inline-flex;
-  }
-
   .brand {
     gap: 0.5rem;
   }
@@ -1170,10 +1134,6 @@ body.notes-drawer-open .drawer-overlay {
   .editor-header-actions {
     width: 100%;
     justify-content: flex-end;
-  }
-
-  body:not(.show-toolbar) .editor-toolbar {
-    display: none;
   }
 
   .editor-wrapper {

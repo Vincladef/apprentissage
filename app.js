@@ -210,9 +210,7 @@ function bootstrapApp() {
     clozeFeedback: document.getElementById("cloze-feedback"),
     sidebarRestore: document.getElementById("restore-sidebar-btn"),
     workspaceOverlay: document.getElementById("drawer-overlay"),
-    mobileNotesBtn: document.getElementById("mobile-notes-btn"),
-    focusToggle: document.getElementById("toggle-focus-btn"),
-    toolbarToggle: document.getElementById("show-toolbar-btn")
+    mobileNotesBtn: document.getElementById("mobile-notes-btn")
   };
 
   const workspaceLayout = document.querySelector(".workspace");
@@ -324,20 +322,6 @@ function bootstrapApp() {
       ui.workspaceOverlay.addEventListener("click", () => setNotesDrawer(false));
     }
 
-    if (ui.focusToggle) {
-      ui.focusToggle.addEventListener("click", () => {
-        const enabled = !document.body.classList.contains("focus-mode");
-        setFocusMode(enabled);
-      });
-    }
-
-    if (ui.toolbarToggle) {
-      ui.toolbarToggle.addEventListener("click", () => {
-        const visible = !document.body.classList.contains("show-toolbar");
-        setToolbarVisibility(visible);
-      });
-    }
-
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
       if (document.body.classList.contains("notes-drawer-open")) {
@@ -347,9 +331,6 @@ function bootstrapApp() {
       if (ui.headerMenu && ui.headerMenu.classList.contains("open")) {
         closeHeaderMenu();
       }
-      if (document.body.classList.contains("show-toolbar")) {
-        setToolbarVisibility(false);
-      }
     });
   }
 
@@ -358,33 +339,12 @@ function bootstrapApp() {
 
     if (!isMobile) {
       setNotesDrawer(false);
-      setToolbarVisibility(false);
-      if (!document.body.classList.contains("focus-mode") && ui.focusToggle) {
-        ui.focusToggle.setAttribute("aria-pressed", "false");
-        ui.focusToggle.setAttribute("aria-label", "Activer le mode focus");
-        const focusLabel = ui.focusToggle.querySelector(".sr-only");
-        if (focusLabel) {
-          focusLabel.textContent = "Activer le mode focus";
-        }
-        const focusIcon = ui.focusToggle.querySelector("[aria-hidden='true']");
-        if (focusIcon) {
-          focusIcon.textContent = "⤢";
-        }
-      }
       setSidebarCollapsed(false);
       updateNotesButtonForSidebar(true);
       closeHeaderMenu();
     } else {
       setNotesDrawer(false);
       updateNotesButtonForDrawer(false);
-      if (!document.body.classList.contains("show-toolbar") && ui.toolbarToggle) {
-        ui.toolbarToggle.setAttribute("aria-pressed", "false");
-        ui.toolbarToggle.setAttribute("aria-label", "Afficher la barre d'outils");
-        const toolbarLabel = ui.toolbarToggle.querySelector(".sr-only");
-        if (toolbarLabel) {
-          toolbarLabel.textContent = "Afficher la barre d'outils";
-        }
-      }
     }
   }
 
@@ -418,50 +378,6 @@ function bootstrapApp() {
     }
     if (shouldOpen) {
       closeHeaderMenu();
-    }
-  }
-
-  function setFocusMode(enabled) {
-    const shouldEnable = Boolean(enabled);
-    document.body.classList.toggle("focus-mode", shouldEnable);
-    if (ui.focusToggle) {
-      ui.focusToggle.setAttribute("aria-pressed", String(shouldEnable));
-      const label = ui.focusToggle.querySelector(".sr-only");
-      if (label) {
-        label.textContent = shouldEnable
-          ? "Désactiver le mode focus"
-          : "Activer le mode focus";
-      }
-      ui.focusToggle.setAttribute(
-        "aria-label",
-        shouldEnable ? "Désactiver le mode focus" : "Activer le mode focus"
-      );
-      const icon = ui.focusToggle.querySelector("[aria-hidden='true']");
-      if (icon) {
-        icon.textContent = shouldEnable ? "⤡" : "⤢";
-      }
-    }
-    if (shouldEnable) {
-      setNotesDrawer(false);
-      closeHeaderMenu();
-    }
-  }
-
-  function setToolbarVisibility(visible) {
-    const shouldShow = Boolean(visible);
-    document.body.classList.toggle("show-toolbar", shouldShow);
-    if (ui.toolbarToggle) {
-      ui.toolbarToggle.setAttribute("aria-pressed", String(shouldShow));
-      const label = ui.toolbarToggle.querySelector(".sr-only");
-      if (label) {
-        label.textContent = shouldShow
-          ? "Masquer la barre d'outils"
-          : "Afficher la barre d'outils";
-      }
-      ui.toolbarToggle.setAttribute(
-        "aria-label",
-        shouldShow ? "Masquer la barre d'outils" : "Afficher la barre d'outils"
-      );
     }
   }
 
@@ -1696,8 +1612,6 @@ function bootstrapApp() {
     ui.logoutBtn.disabled = true;
     closeHeaderMenu();
     setNotesDrawer(false);
-    setFocusMode(false);
-    setToolbarVisibility(false);
     setSidebarCollapsed(false);
     try {
       await flushPendingSave();
