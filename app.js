@@ -173,6 +173,8 @@ function bootstrapApp() {
     loginButton: document.querySelector("#login-form button[type='submit']"),
     currentUser: document.getElementById("current-user"),
     logoutBtn: document.getElementById("logout-btn"),
+    headerMenuBtn: document.getElementById("workspace-menu-btn"),
+    headerMenu: document.getElementById("workspace-menu"),
     addNoteBtn: document.getElementById("add-note-btn"),
     notesContainer: document.getElementById("notes-container"),
     noteTitle: document.getElementById("note-title"),
@@ -185,8 +187,15 @@ function bootstrapApp() {
     blockFormat: document.getElementById("block-format"),
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
-    clozeFeedback: document.getElementById("cloze-feedback")
+    clozeFeedback: document.getElementById("cloze-feedback"),
+    sidebarToggle: document.getElementById("toggle-sidebar"),
+    workspaceOverlay: document.getElementById("drawer-overlay"),
+    mobileNotesBtn: document.getElementById("mobile-notes-btn"),
+    focusToggle: document.getElementById("toggle-focus-btn"),
+    toolbarToggle: document.getElementById("show-toolbar-btn")
   };
+
+  const workspaceLayout = document.querySelector(".workspace");
 
   showView(null);
   ui.logoutBtn.disabled = true;
@@ -196,6 +205,15 @@ function bootstrapApp() {
   }
   if (ui.blockFormat) {
     ui.blockFormat.value = "p";
+  }
+
+  const mobileMediaQuery = window.matchMedia("(max-width: 900px)");
+  setupLayoutControls();
+  handleResponsiveState(mobileMediaQuery);
+  if (typeof mobileMediaQuery.addEventListener === "function") {
+    mobileMediaQuery.addEventListener("change", handleResponsiveState);
+  } else if (typeof mobileMediaQuery.addListener === "function") {
+    mobileMediaQuery.addListener(handleResponsiveState);
   }
 
   function showView(name) {
@@ -214,6 +232,201 @@ function bootstrapApp() {
     setTimeout(() => {
       ui.toast.classList.add("hidden");
     }, 2600);
+  }
+
+  function setupLayoutControls() {
+    setSidebarCollapsed(false);
+
+    if (ui.sidebarToggle) {
+      ui.sidebarToggle.addEventListener("click", () => {
+        const isCollapsed = workspaceLayout?.classList.contains("sidebar-collapsed");
+        setSidebarCollapsed(!isCollapsed);
+      });
+    }
+
+    if (ui.headerMenuBtn && ui.headerMenu) {
+      ui.headerMenuBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = ui.headerMenu.classList.contains("open");
+        toggleHeaderMenu(!isOpen);
+      });
+    }
+
+    if (ui.mobileNotesBtn) {
+      ui.mobileNotesBtn.addEventListener("click", () => {
+        const shouldOpen = !document.body.classList.contains("notes-drawer-open");
+        setNotesDrawer(shouldOpen);
+      });
+    }
+
+    if (ui.workspaceOverlay) {
+      ui.workspaceOverlay.addEventListener("click", () => setNotesDrawer(false));
+    }
+
+    if (ui.focusToggle) {
+      ui.focusToggle.addEventListener("click", () => {
+        const enabled = !document.body.classList.contains("focus-mode");
+        setFocusMode(enabled);
+      });
+    }
+
+    if (ui.toolbarToggle) {
+      ui.toolbarToggle.addEventListener("click", () => {
+        const visible = !document.body.classList.contains("show-toolbar");
+        setToolbarVisibility(visible);
+      });
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (document.body.classList.contains("notes-drawer-open")) {
+        setNotesDrawer(false);
+        return;
+      }
+      if (ui.headerMenu && ui.headerMenu.classList.contains("open")) {
+        closeHeaderMenu();
+      }
+      if (document.body.classList.contains("show-toolbar")) {
+        setToolbarVisibility(false);
+      }
+    });
+  }
+
+  function handleResponsiveState(event) {
+    const isMobile = event?.matches ?? mobileMediaQuery.matches;
+
+    if (!isMobile) {
+      setNotesDrawer(false);
+      setToolbarVisibility(false);
+      if (!document.body.classList.contains("focus-mode") && ui.focusToggle) {
+        ui.focusToggle.setAttribute("aria-pressed", "false");
+        const focusLabel = ui.focusToggle.querySelector(".sr-only");
+        if (focusLabel) {
+          focusLabel.textContent = "Activer le mode focus";
+        }
+        const focusIcon = ui.focusToggle.querySelector("[aria-hidden='true']");
+        if (focusIcon) {
+          focusIcon.textContent = "⤢";
+        }
+      }
+      setSidebarCollapsed(false);
+      closeHeaderMenu();
+    } else {
+      setNotesDrawer(false);
+      if (!document.body.classList.contains("show-toolbar") && ui.toolbarToggle) {
+        ui.toolbarToggle.setAttribute("aria-pressed", "false");
+        const toolbarLabel = ui.toolbarToggle.querySelector(".sr-only");
+        if (toolbarLabel) {
+          toolbarLabel.textContent = "Afficher la barre d'outils";
+        }
+      }
+      if (ui.mobileNotesBtn && !document.body.classList.contains("notes-drawer-open")) {
+        ui.mobileNotesBtn.setAttribute("aria-pressed", "false");
+        ui.mobileNotesBtn.setAttribute("aria-label", "Afficher les fiches");
+      }
+    }
+  }
+
+  function setSidebarCollapsed(collapsed) {
+    if (!workspaceLayout || !ui.sidebarToggle) return;
+    workspaceLayout.classList.toggle("sidebar-collapsed", Boolean(collapsed));
+    ui.sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+    ui.sidebarToggle.setAttribute(
+      "aria-label",
+      collapsed ? "Afficher la liste des fiches" : "Réduire la liste des fiches"
+    );
+    const icon = ui.sidebarToggle.querySelector("span");
+    if (icon) {
+      icon.textContent = collapsed ? "☰" : "⟷";
+    }
+  }
+
+  function setNotesDrawer(open) {
+    const shouldOpen = Boolean(open);
+    document.body.classList.toggle("notes-drawer-open", shouldOpen);
+    if (ui.mobileNotesBtn) {
+      ui.mobileNotesBtn.setAttribute("aria-pressed", String(shouldOpen));
+      ui.mobileNotesBtn.setAttribute(
+        "aria-label",
+        shouldOpen ? "Masquer les fiches" : "Afficher les fiches"
+      );
+    }
+    if (ui.workspaceOverlay) {
+      if (shouldOpen) {
+        ui.workspaceOverlay.removeAttribute("hidden");
+      } else if (!ui.workspaceOverlay.hasAttribute("hidden")) {
+        ui.workspaceOverlay.setAttribute("hidden", "");
+      }
+    }
+    if (shouldOpen) {
+      closeHeaderMenu();
+    }
+  }
+
+  function setFocusMode(enabled) {
+    const shouldEnable = Boolean(enabled);
+    document.body.classList.toggle("focus-mode", shouldEnable);
+    if (ui.focusToggle) {
+      ui.focusToggle.setAttribute("aria-pressed", String(shouldEnable));
+      const label = ui.focusToggle.querySelector(".sr-only");
+      if (label) {
+        label.textContent = shouldEnable
+          ? "Désactiver le mode focus"
+          : "Activer le mode focus";
+      }
+      const icon = ui.focusToggle.querySelector("[aria-hidden='true']");
+      if (icon) {
+        icon.textContent = shouldEnable ? "⤡" : "⤢";
+      }
+    }
+    if (shouldEnable) {
+      setNotesDrawer(false);
+      closeHeaderMenu();
+    }
+  }
+
+  function setToolbarVisibility(visible) {
+    const shouldShow = Boolean(visible);
+    document.body.classList.toggle("show-toolbar", shouldShow);
+    if (ui.toolbarToggle) {
+      ui.toolbarToggle.setAttribute("aria-pressed", String(shouldShow));
+      const label = ui.toolbarToggle.querySelector(".sr-only");
+      if (label) {
+        label.textContent = shouldShow
+          ? "Masquer la barre d'outils"
+          : "Afficher la barre d'outils";
+      }
+    }
+  }
+
+  function toggleHeaderMenu(forceOpen) {
+    if (!ui.headerMenuBtn || !ui.headerMenu) return;
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !ui.headerMenu.classList.contains("open");
+    if (shouldOpen) {
+      ui.headerMenu.classList.add("open");
+      ui.headerMenuBtn.setAttribute("aria-expanded", "true");
+      document.addEventListener("click", closeMenuOnOutsideClick);
+    } else {
+      closeHeaderMenu();
+    }
+  }
+
+  function closeHeaderMenu() {
+    if (!ui.headerMenuBtn || !ui.headerMenu) return;
+    ui.headerMenu.classList.remove("open");
+    ui.headerMenuBtn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", closeMenuOnOutsideClick);
+  }
+
+  function closeMenuOnOutsideClick(event) {
+    if (!ui.headerMenuBtn || !ui.headerMenu) return;
+    if (
+      ui.headerMenu.contains(event.target) ||
+      ui.headerMenuBtn.contains(event.target)
+    ) {
+      return;
+    }
+    closeHeaderMenu();
   }
 
   function isPermissionDenied(error) {
@@ -1387,6 +1600,11 @@ function bootstrapApp() {
 
   async function logout() {
     ui.logoutBtn.disabled = true;
+    closeHeaderMenu();
+    setNotesDrawer(false);
+    setFocusMode(false);
+    setToolbarVisibility(false);
+    setSidebarCollapsed(false);
     try {
       await flushPendingSave();
       await signOut(auth);
