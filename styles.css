@@ -12,6 +12,8 @@
   --danger: #e07c7c;
   --success: #7ccfa9;
   --warning: #f6b26b;
+  --header-height: 4.5rem;
+  --toolbar-offset: calc(var(--header-height) + 0.75rem);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -30,6 +32,10 @@ body {
 
 body.notes-drawer-open {
   overflow: hidden;
+}
+
+body.focus-mode {
+  --toolbar-offset: 1.25rem;
 }
 
 body.focus-mode .app-header {
@@ -439,10 +445,9 @@ input[type="text"]:focus {
 .editor-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   height: 100%;
   position: relative;
-  padding-top: 4.5rem;
 }
 
 .editor-header {
@@ -453,43 +458,33 @@ input[type="text"]:focus {
 }
 
 .editor-toolbar {
-  position: absolute;
-  top: 1.1rem;
-  left: 50%;
-  transform: translateX(-50%);
+  position: sticky;
+  top: var(--toolbar-offset);
+  left: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.45rem 0.85rem;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 0.9rem;
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 1.75rem;
-  border: 1px solid rgba(90, 155, 216, 0.25);
-  box-shadow: var(--card-shadow);
+  border-radius: 1.35rem;
+  border: 1px solid rgba(90, 155, 216, 0.28);
+  box-shadow: 0 24px 40px -32px rgba(47, 108, 169, 0.55);
   backdrop-filter: blur(10px);
-  max-width: calc(100% - 3rem);
-  overflow-x: auto;
-  scrollbar-width: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 2;
-}
-
-.editor-toolbar::-webkit-scrollbar {
-  display: none;
-}
-
-body.show-toolbar .editor-toolbar {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateX(-50%);
+  width: 100%;
+  align-self: stretch;
+  margin-bottom: 0.5rem;
+  z-index: 4;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  padding-right: 0.6rem;
-  margin-right: 0.6rem;
+  padding-right: 0.75rem;
+  margin-right: 0.75rem;
   border-right: 1px solid rgba(90, 155, 216, 0.2);
+  flex-wrap: wrap;
 }
 
 .toolbar-group:last-child {
@@ -499,7 +494,17 @@ body.show-toolbar .editor-toolbar {
 }
 
 .toolbar-group--primary {
+  flex: 1 1 320px;
   gap: 0.5rem;
+}
+
+.toolbar-group--primary > .toolbar-select {
+  flex: 1 1 180px;
+}
+
+.toolbar-group--primary > .font-size-control {
+  flex: 1 1 140px;
+  justify-content: space-between;
 }
 
 .toolbar-select {
@@ -508,17 +513,20 @@ body.show-toolbar .editor-toolbar {
   align-items: center;
   background: white;
   border: 1px solid rgba(90, 155, 216, 0.3);
-  border-radius: 0.5rem;
-  padding: 0 0.45rem;
-  min-width: 130px;
+  border-radius: 0.6rem;
+  padding: 0 0.6rem;
+  min-height: 2.35rem;
+  min-width: 140px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .toolbar-select::after {
   content: "▾";
   position: absolute;
-  right: 0.6rem;
-  font-size: 0.75rem;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
   color: var(--muted);
   pointer-events: none;
 }
@@ -526,8 +534,8 @@ body.show-toolbar .editor-toolbar {
 .toolbar-select select {
   border: none;
   background: transparent;
-  padding: 0.35rem 1.5rem 0.35rem 0.2rem;
-  font-size: 0.9rem;
+  padding: 0 1.7rem 0 0;
+  font-size: 0.95rem;
   color: var(--fg);
   appearance: none;
   width: 100%;
@@ -540,36 +548,37 @@ body.show-toolbar .editor-toolbar {
 .font-size-control {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
   background: white;
   border: 1px solid rgba(90, 155, 216, 0.3);
-  border-radius: 0.5rem;
-  padding: 0.2rem 0.35rem;
+  border-radius: 0.6rem;
+  padding: 0.3rem 0.5rem;
+  min-height: 2.35rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .font-size-control #font-size-value {
-  min-width: 2.4ch;
+  min-width: 2.8ch;
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
 
 .editor-toolbar .toolbar-button {
   background: white;
-  border-radius: 0.45rem;
+  border-radius: 0.55rem;
   border: 1px solid transparent;
   color: var(--fg);
-  padding: 0.3rem 0.55rem;
-  min-width: 2rem;
-  height: 2rem;
+  padding: 0.35rem 0.6rem;
+  min-width: 2.35rem;
+  min-height: 2.35rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .editor-toolbar .toolbar-button:hover {
@@ -940,6 +949,10 @@ body.notes-drawer-open .drawer-overlay {
 }
 
 @media (max-width: 900px) {
+  :root {
+    --header-height: 3.6rem;
+  }
+
   .app-header {
     padding: 0.75rem 1.1rem;
   }
@@ -1007,21 +1020,13 @@ body.notes-drawer-open .drawer-overlay {
     border-radius: 1.1rem;
   }
 
-  .editor-wrapper {
-    padding-top: 3.6rem;
-  }
-
   .editor-toolbar {
-    top: 0.6rem;
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, -0.6rem) scale(0.96);
-  }
-
-  body.show-toolbar .editor-toolbar {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translate(-50%, 0);
+    top: var(--toolbar-offset);
+    margin: 0 0 0.75rem;
+    width: 100%;
+    border-radius: 1.1rem;
+    box-shadow: 0 22px 40px -30px rgba(47, 108, 169, 0.5);
+    justify-content: flex-start;
   }
 
   .editor-header {
@@ -1034,6 +1039,27 @@ body.notes-drawer-open .drawer-overlay {
     border-right: none;
     margin-right: 0;
     padding-right: 0;
+    width: 100%;
+    border-bottom: 1px solid rgba(90, 155, 216, 0.18);
+    padding-bottom: 0.4rem;
+  }
+
+  .toolbar-group:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .toolbar-group--primary {
+    flex-basis: 100%;
+  }
+
+  .toolbar-group--primary > .toolbar-select,
+  .toolbar-group--primary > .font-size-control {
+    flex: 1 1 100%;
+  }
+
+  .floating-action.toolbar {
+    display: none;
   }
 }
 
