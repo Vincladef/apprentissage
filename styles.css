@@ -505,8 +505,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .editor-wrapper {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 1rem;
   flex: 1 1 auto;
   height: 100%;
@@ -514,6 +514,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   max-width: 860px;
   margin: 0 auto;
   width: 100%;
+  align-content: start;
 }
 
 .editor-header {
@@ -538,7 +539,11 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .editor-toolbar {
   position: -webkit-sticky;
   position: sticky;
-  top: calc(var(--toolbar-offset) + var(--toolbar-sticky-gap));
+  top: calc(
+    var(--toolbar-offset, var(--header-height, 0px)) +
+      var(--toolbar-sticky-gap, 0.5rem) +
+      env(safe-area-inset-top, 0px)
+  );
   left: 0;
   right: 0;
   display: flex;
@@ -1103,7 +1108,11 @@ body.notes-drawer-open .drawer-overlay {
   .editor-toolbar {
     position: -webkit-sticky;
     position: sticky;
-    top: calc(var(--toolbar-offset) + var(--toolbar-sticky-gap));
+    top: calc(
+      var(--toolbar-offset, var(--header-height, 0px)) +
+        var(--toolbar-sticky-gap, 0.5rem) +
+        env(safe-area-inset-top, 0px)
+    );
     left: 0;
     right: 0;
     transform: none;
