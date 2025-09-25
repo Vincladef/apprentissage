@@ -213,6 +213,24 @@ function bootstrapApp() {
   };
 
   const workspaceLayout = document.querySelector(".workspace");
+  const bodyElement = document.body;
+
+  const SCROLL_COLLAPSE_THRESHOLD = 24;
+
+  function updateHeaderCollapseState() {
+    if (!bodyElement) {
+      return;
+    }
+
+    if (window.scrollY > SCROLL_COLLAPSE_THRESHOLD) {
+      bodyElement.classList.add("header-collapsed");
+    } else {
+      bodyElement.classList.remove("header-collapsed");
+    }
+  }
+
+  window.addEventListener("scroll", updateHeaderCollapseState, { passive: true });
+  updateHeaderCollapseState();
 
   showView(null);
   ui.logoutBtn.disabled = true;
