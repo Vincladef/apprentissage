@@ -161,6 +161,21 @@ function bootstrapApp() {
     }, 2600);
   }
 
+  function isPermissionDenied(error) {
+    if (!error) return false;
+    if (error.code === "permission-denied") return true;
+    const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+    return message.includes("missing or insufficient permissions");
+  }
+
+  function reportPermissionIssue(context) {
+    const hint =
+      "Règles Firestore insuffisantes. Déployez le fichier firestore.rules dans votre projet et vérifiez AUTH_EMAIL_DOMAIN.";
+    const fullMessage = context ? `${context} : ${hint}` : hint;
+    console.error(fullMessage);
+    showToast("Permissions Firestore insuffisantes. Consultez la console pour les étapes.", "error");
+  }
+
   function normalizePseudoInput(rawPseudo = "") {
     const trimmed = (rawPseudo || "").trim();
     if (!trimmed) {
@@ -524,8 +539,12 @@ function bootstrapApp() {
       state.pendingSelectionId = docRef.id;
       showToast("Fiche créée", "success");
     } catch (error) {
-      console.error("Impossible de créer la fiche", error);
-      showToast("Impossible de créer la fiche", "error");
+      if (isPermissionDenied(error)) {
+        reportPermissionIssue("Création de fiche refusée par Firestore");
+      } else {
+        console.error("Impossible de créer la fiche", error);
+        showToast("Impossible de créer la fiche", "error");
+      }
     }
   }
 
@@ -572,8 +591,12 @@ function bootstrapApp() {
         updateNotesFromSnapshot(snapshot);
       },
       (error) => {
-        console.error("Erreur lors du chargement des fiches", error);
-        showToast("Impossible de charger vos fiches", "error");
+        if (isPermissionDenied(error)) {
+          reportPermissionIssue("Lecture des fiches refusée par Firestore");
+        } else {
+          console.error("Erreur lors du chargement des fiches", error);
+          showToast("Impossible de charger vos fiches", "error");
+        }
       }
     );
   }
