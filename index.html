@@ -15,8 +15,19 @@
   <body>
     <header class="app-header">
       <div class="brand">
-        <h1>Apprentissage actif</h1>
-        <p class="subtitle">Des fiches simples, prêtes à apprendre.</p>
+        <button
+          type="button"
+          id="mobile-notes-btn"
+          class="header-icon-button mobile-only"
+          aria-label="Afficher les fiches"
+          aria-pressed="false"
+        >
+          ☰
+        </button>
+        <div class="brand-text">
+          <h1>Apprentissage actif</h1>
+          <p class="subtitle">Des fiches simples, prêtes à apprendre.</p>
+        </div>
       </div>
       <div class="header-actions">
         <span id="current-user" class="muted"></span>
@@ -218,35 +229,6 @@
           </section>
         </div>
         <div id="drawer-overlay" class="drawer-overlay" hidden></div>
-        <div class="floating-actions" aria-live="polite">
-          <button
-            type="button"
-            id="mobile-notes-btn"
-            class="floating-action notes"
-            aria-label="Afficher les fiches"
-            aria-pressed="false"
-          >
-            📑
-          </button>
-          <button
-            type="button"
-            id="toggle-focus-btn"
-            class="floating-action focus"
-            aria-pressed="false"
-          >
-            <span aria-hidden="true">⤢</span>
-            <span class="sr-only">Activer le mode focus</span>
-          </button>
-          <button
-            type="button"
-            id="show-toolbar-btn"
-            class="floating-action toolbar"
-            aria-pressed="false"
-          >
-            A
-            <span class="sr-only">Afficher la barre d'outils</span>
-          </button>
-        </div>
       </section>
     </main>
 
