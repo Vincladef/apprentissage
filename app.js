@@ -208,7 +208,6 @@ function bootstrapApp() {
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
     clozeFeedback: document.getElementById("cloze-feedback"),
-    sidebarToggle: document.getElementById("toggle-sidebar"),
     sidebarRestore: document.getElementById("restore-sidebar-btn"),
     workspaceOverlay: document.getElementById("drawer-overlay"),
     mobileNotesBtn: document.getElementById("mobile-notes-btn"),
@@ -237,6 +236,40 @@ function bootstrapApp() {
     mobileMediaQuery.addListener(handleResponsiveState);
   }
 
+  function closestElement(target, selector) {
+    if (!target || typeof target.closest !== "function") {
+      return null;
+    }
+    return target.closest(selector);
+  }
+
+  function setNotesButtonLabel(label) {
+    if (!ui.mobileNotesBtn) return;
+    ui.mobileNotesBtn.setAttribute("aria-label", label);
+    const srText = ui.mobileNotesBtn.querySelector(".sr-only");
+    if (srText) {
+      srText.textContent = label;
+    }
+  }
+
+  function updateNotesButtonForSidebar(isExpanded) {
+    if (!ui.mobileNotesBtn) return;
+    ui.mobileNotesBtn.dataset.mode = "sidebar";
+    ui.mobileNotesBtn.setAttribute("aria-pressed", String(isExpanded));
+    ui.mobileNotesBtn.setAttribute("aria-expanded", String(isExpanded));
+    setNotesButtonLabel(
+      isExpanded ? "Masquer la liste des fiches" : "Afficher la liste des fiches"
+    );
+  }
+
+  function updateNotesButtonForDrawer(isOpen) {
+    if (!ui.mobileNotesBtn) return;
+    ui.mobileNotesBtn.dataset.mode = "drawer";
+    ui.mobileNotesBtn.setAttribute("aria-pressed", String(isOpen));
+    ui.mobileNotesBtn.removeAttribute("aria-expanded");
+    setNotesButtonLabel(isOpen ? "Masquer les fiches" : "Afficher les fiches");
+  }
+
   function showView(name) {
     Object.entries(views).forEach(([key, section]) => {
       if (!section) return;
@@ -258,18 +291,11 @@ function bootstrapApp() {
   function setupLayoutControls() {
     setSidebarCollapsed(false);
 
-    if (ui.sidebarToggle) {
-      ui.sidebarToggle.addEventListener("click", () => {
-        const isCollapsed = workspaceLayout?.classList.contains("sidebar-collapsed");
-        setSidebarCollapsed(!isCollapsed);
-      });
-    }
-
     if (ui.sidebarRestore) {
       ui.sidebarRestore.addEventListener("click", () => {
         setSidebarCollapsed(false);
-        if (ui.sidebarToggle) {
-          ui.sidebarToggle.focus();
+        if (ui.mobileNotesBtn && !mobileMediaQuery.matches) {
+          ui.mobileNotesBtn.focus();
         }
       });
     }
@@ -284,8 +310,13 @@ function bootstrapApp() {
 
     if (ui.mobileNotesBtn) {
       ui.mobileNotesBtn.addEventListener("click", () => {
-        const shouldOpen = !document.body.classList.contains("notes-drawer-open");
-        setNotesDrawer(shouldOpen);
+        if (mobileMediaQuery.matches) {
+          const shouldOpen = !document.body.classList.contains("notes-drawer-open");
+          setNotesDrawer(shouldOpen);
+        } else {
+          const isCollapsed = workspaceLayout?.classList.contains("sidebar-collapsed");
+          setSidebarCollapsed(!isCollapsed);
+        }
       });
     }
 
@@ -341,9 +372,11 @@ function bootstrapApp() {
         }
       }
       setSidebarCollapsed(false);
+      updateNotesButtonForSidebar(true);
       closeHeaderMenu();
     } else {
       setNotesDrawer(false);
+      updateNotesButtonForDrawer(false);
       if (!document.body.classList.contains("show-toolbar") && ui.toolbarToggle) {
         ui.toolbarToggle.setAttribute("aria-pressed", "false");
         ui.toolbarToggle.setAttribute("aria-label", "Afficher la barre d'outils");
@@ -351,10 +384,6 @@ function bootstrapApp() {
         if (toolbarLabel) {
           toolbarLabel.textContent = "Afficher la barre d'outils";
         }
-      }
-      if (ui.mobileNotesBtn && !document.body.classList.contains("notes-drawer-open")) {
-        ui.mobileNotesBtn.setAttribute("aria-pressed", "false");
-        ui.mobileNotesBtn.setAttribute("aria-label", "Afficher les fiches");
       }
     }
   }
@@ -364,16 +393,8 @@ function bootstrapApp() {
     const shouldCollapse = Boolean(collapsed);
     workspaceLayout.classList.toggle("sidebar-collapsed", shouldCollapse);
 
-    if (ui.sidebarToggle) {
-      ui.sidebarToggle.setAttribute("aria-expanded", String(!shouldCollapse));
-      ui.sidebarToggle.setAttribute(
-        "aria-label",
-        shouldCollapse ? "Afficher la liste des fiches" : "Réduire la liste des fiches"
-      );
-      const icon = ui.sidebarToggle.querySelector("span");
-      if (icon) {
-        icon.textContent = shouldCollapse ? "☰" : "⟷";
-      }
+    if (ui.mobileNotesBtn && !mobileMediaQuery.matches) {
+      updateNotesButtonForSidebar(!shouldCollapse);
     }
 
     if (ui.sidebarRestore) {
@@ -385,12 +406,8 @@ function bootstrapApp() {
   function setNotesDrawer(open) {
     const shouldOpen = Boolean(open);
     document.body.classList.toggle("notes-drawer-open", shouldOpen);
-    if (ui.mobileNotesBtn) {
-      ui.mobileNotesBtn.setAttribute("aria-pressed", String(shouldOpen));
-      ui.mobileNotesBtn.setAttribute(
-        "aria-label",
-        shouldOpen ? "Masquer les fiches" : "Afficher les fiches"
-      );
+    if (ui.mobileNotesBtn && mobileMediaQuery.matches) {
+      updateNotesButtonForDrawer(shouldOpen);
     }
     if (ui.workspaceOverlay) {
       if (shouldOpen) {
@@ -1332,7 +1349,7 @@ function bootstrapApp() {
   }
 
   function handleEditorClick(event) {
-    const cloze = event.target.closest(".cloze");
+    const cloze = closestElement(event.target, ".cloze");
     if (!cloze) {
       hideClozeFeedback();
       return;
@@ -1358,7 +1375,7 @@ function bootstrapApp() {
   }
 
   function handleClozeFeedbackClick(event) {
-    const button = event.target.closest("button[data-feedback]");
+    const button = closestElement(event.target, "button[data-feedback]");
     if (!button) return;
     event.preventDefault();
     const cloze = state.activeCloze;
@@ -1401,14 +1418,14 @@ function bootstrapApp() {
     if (ui.clozeFeedback.contains(event.target)) {
       return;
     }
-    if (event.target.closest(".cloze")) {
+    if (closestElement(event.target, ".cloze")) {
       return;
     }
     hideClozeFeedback();
   }
 
   function handleToolbarChange(event) {
-    const select = event.target.closest("select[data-command]");
+    const select = closestElement(event.target, "select[data-command]");
     if (!select || !state.currentNote) return;
     let value = select.value;
     const command = select.dataset.command;
@@ -1422,7 +1439,7 @@ function bootstrapApp() {
   }
 
   function handleToolbarClick(event) {
-    const button = event.target.closest("button[data-command], button[data-action]");
+    const button = closestElement(event.target, "button[data-command], button[data-action]");
     if (!button || !state.currentNote) return;
     const command = button.dataset.command;
     const action = button.dataset.action;
