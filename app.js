@@ -500,13 +500,51 @@ function bootstrapApp() {
 
     const mobileQuery = window.matchMedia("(max-width: 900px)");
     const viewport = window.visualViewport;
+    let safeAreaProbe = null;
     let animationFrame = null;
     let lastKnownHeight = null;
+    let baseViewportHeight =
+      viewport && typeof viewport.height === "number" && viewport.height > 0
+        ? viewport.height
+        : null;
+
+    const ensureSafeAreaProbe = () => {
+      if (safeAreaProbe || !document.body) {
+        return;
+      }
+      safeAreaProbe = document.createElement("div");
+      safeAreaProbe.setAttribute("aria-hidden", "true");
+      safeAreaProbe.style.position = "fixed";
+      safeAreaProbe.style.left = "0";
+      safeAreaProbe.style.bottom = "0";
+      safeAreaProbe.style.height = "0";
+      safeAreaProbe.style.width = "0";
+      safeAreaProbe.style.visibility = "hidden";
+      safeAreaProbe.style.pointerEvents = "none";
+      safeAreaProbe.style.zIndex = "-1";
+      safeAreaProbe.style.paddingBottom = "env(safe-area-inset-bottom)";
+      document.body.appendChild(safeAreaProbe);
+    };
+
+    const readSafeAreaBottom = () => {
+      ensureSafeAreaProbe();
+      if (!safeAreaProbe) {
+        return 0;
+      }
+      const value = cssValueToPx(getComputedStyle(safeAreaProbe).paddingBottom);
+      return Number.isFinite(value) && value > 0 ? value : 0;
+    };
 
     const clearInlineMetrics = () => {
       rootElement.style.removeProperty("--mobile-toolbar-bottom");
       rootElement.style.removeProperty("--mobile-toolbar-height");
+      rootElement.style.removeProperty("--mobile-toolbar-keyboard-offset");
       rootElement.style.removeProperty("--editor-mobile-bottom-padding");
+      lastKnownHeight = null;
+      baseViewportHeight =
+        viewport && typeof viewport.height === "number" && viewport.height > 0
+          ? viewport.height
+          : null;
     };
 
     const getSpacingPx = () => {
@@ -522,14 +560,45 @@ function bootstrapApp() {
       }
 
       const spacingPx = getSpacingPx();
+      const hasViewportMetrics =
+        viewport && typeof viewport.height === "number" && viewport.height > 0;
       let keyboardInset = 0;
 
-      if (viewport && typeof viewport.height === "number") {
+      if (hasViewportMetrics) {
+        const currentHeight = viewport.height;
+        if (baseViewportHeight === null) {
+          baseViewportHeight = currentHeight;
+        } else if (currentHeight > baseViewportHeight - 24) {
+          baseViewportHeight = currentHeight;
+        }
+
+        const referenceHeight = baseViewportHeight || currentHeight;
+        const heightDelta = referenceHeight - currentHeight;
+        if (heightDelta > 30) {
+          keyboardInset = heightDelta;
+        }
+
         const offsetTop = typeof viewport.offsetTop === "number" ? viewport.offsetTop : 0;
-        keyboardInset = Math.max(0, window.innerHeight - viewport.height - offsetTop);
+        if (offsetTop > 0) {
+          keyboardInset = Math.max(keyboardInset, offsetTop);
+        }
       }
 
-      const bottom = Math.max(spacingPx, keyboardInset + spacingPx);
+      const safeAreaBottom = readSafeAreaBottom();
+      const bottom = Math.max(spacingPx + safeAreaBottom, keyboardInset + spacingPx);
+
+      if (hasViewportMetrics) {
+        const keyboardOffsetValue = keyboardInset > 0 ? keyboardInset : 0;
+        rootElement.style.setProperty(
+          "--mobile-toolbar-keyboard-offset",
+          `${keyboardOffsetValue}px`
+        );
+        rootElement.style.setProperty("--mobile-toolbar-bottom", `${bottom}px`);
+      } else {
+        baseViewportHeight = null;
+        rootElement.style.removeProperty("--mobile-toolbar-keyboard-offset");
+        rootElement.style.removeProperty("--mobile-toolbar-bottom");
+      }
       const toolbarRect = ui.toolbar.getBoundingClientRect();
 
       if (toolbarRect.height > 0) {
@@ -542,14 +611,23 @@ function bootstrapApp() {
       const toolbarHeight =
         (lastKnownHeight && lastKnownHeight > 0 ? lastKnownHeight : 0) || (fallbackHeight || 76);
 
-      rootElement.style.setProperty("--mobile-toolbar-bottom", `${bottom}px`);
       rootElement.style.setProperty("--mobile-toolbar-height", `${toolbarHeight}px`);
 
-      const paddingExtra = Math.max(spacingPx * 2, spacingPx + 24);
-      rootElement.style.setProperty(
-        "--editor-mobile-bottom-padding",
-        `${bottom + toolbarHeight + paddingExtra}px`
-      );
+      if (hasViewportMetrics) {
+        let paddingExtra = Math.max(spacingPx * 2, spacingPx + 24);
+        if (keyboardInset > 0) {
+          paddingExtra = Math.max(
+            paddingExtra,
+            spacingPx + Math.min(48, keyboardInset * 0.35)
+          );
+        }
+        rootElement.style.setProperty(
+          "--editor-mobile-bottom-padding",
+          `${bottom + toolbarHeight + paddingExtra}px`
+        );
+      } else {
+        rootElement.style.removeProperty("--editor-mobile-bottom-padding");
+      }
     };
 
     const scheduleMetricsUpdate = () => {
@@ -578,6 +656,7 @@ function bootstrapApp() {
 
     window.addEventListener("resize", scheduleMetricsUpdate);
     window.addEventListener("orientationchange", () => {
+      baseViewportHeight = null;
       setTimeout(scheduleMetricsUpdate, 120);
     });
     document.addEventListener("focusin", scheduleMetricsUpdate);
