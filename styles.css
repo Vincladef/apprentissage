@@ -536,6 +536,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .editor-toolbar {
+  position: -webkit-sticky;
   position: sticky;
   top: calc(var(--toolbar-offset) + var(--toolbar-sticky-gap));
   left: 0;
@@ -711,25 +712,6 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   font-weight: 600;
   font-size: 0.95rem;
   font-family: inherit;
-}
-
-.editor-toolbar .iteration-button {
-  gap: 0.45rem;
-  padding: 0.3rem 0.85rem;
-  font-weight: 600;
-  color: var(--accent-strong);
-  border-color: rgba(26, 115, 232, 0.35);
-  background: rgba(26, 115, 232, 0.12);
-}
-
-.editor-toolbar .iteration-button:hover {
-  background: rgba(26, 115, 232, 0.2);
-  border-color: rgba(26, 115, 232, 0.45);
-  color: var(--accent-strong);
-}
-
-.editor-toolbar .iteration-button .icon {
-  font-size: 1rem;
 }
 
 .editor-toolbar .toolbar-button[data-command="italic"] .icon {
@@ -1116,6 +1098,7 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .editor-toolbar {
+    position: -webkit-sticky;
     position: sticky;
     top: calc(var(--toolbar-offset) + var(--toolbar-sticky-gap));
     left: 0;
@@ -1123,8 +1106,8 @@ body.notes-drawer-open .drawer-overlay {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 0.55rem 0.75rem;
-    gap: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    gap: 0.45rem;
     border-radius: 0.9rem;
     border: 1px solid rgba(15, 23, 42, 0.08);
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15), 0 4px 10px rgba(15, 23, 42, 0.12);
@@ -1170,12 +1153,12 @@ body.notes-drawer-open .drawer-overlay {
     display: none;
     width: 100%;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.55rem;
     background: rgba(248, 250, 252, 0.96);
     border: 1px solid rgba(15, 23, 42, 0.08);
-    border-radius: 0.85rem;
-    padding: 0.85rem;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18), 0 4px 10px rgba(15, 23, 42, 0.12);
+    border-radius: 0.75rem;
+    padding: 0.65rem 0.7rem;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18), 0 4px 10px rgba(15, 23, 42, 0.1);
     margin-top: 0.35rem;
   }
 
@@ -1190,11 +1173,11 @@ body.notes-drawer-open .drawer-overlay {
     padding: 0;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.65rem;
+    gap: 0.4rem;
   }
 
   .toolbar-more-panel .toolbar-group.toolbar-group--primary {
-    gap: 0.8rem;
+    gap: 0.5rem;
   }
 
   .toolbar-more-panel .toolbar-group.toolbar-group--primary > .toolbar-select,
@@ -1203,9 +1186,35 @@ body.notes-drawer-open .drawer-overlay {
     width: 100%;
   }
 
+  .toolbar-more-panel .toolbar-select {
+    min-height: 2rem;
+    padding: 0 0.5rem;
+  }
+
+  .toolbar-more-panel .toolbar-select select {
+    font-size: 0.92rem;
+  }
+
+  .toolbar-more-panel .font-size-control {
+    min-height: 2rem;
+    padding: 0.2rem 0.35rem;
+    gap: 0.3rem;
+  }
+
+  .toolbar-more-panel .font-size-control #font-size-value {
+    font-size: 0.92rem;
+  }
+
   .toolbar-more-panel .toolbar-group .toolbar-button {
     width: 100%;
     justify-content: center;
+    min-height: 2.1rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.92rem;
+  }
+
+  .toolbar-more-panel .toolbar-group .toolbar-button .icon {
+    font-size: 0.92rem;
   }
 
   .editor-header {
@@ -1312,8 +1321,9 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .toolbar-more-panel {
-    padding: 0.75rem;
-    gap: 0.65rem;
+    padding: 0.5rem 0.6rem;
+    gap: 0.45rem;
+    border-radius: 0.65rem;
   }
 
   .toolbar-select {
