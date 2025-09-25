@@ -209,7 +209,9 @@ function bootstrapApp() {
     fontSizeValue: document.getElementById("font-size-value"),
     clozeFeedback: document.getElementById("cloze-feedback"),
     workspaceOverlay: document.getElementById("drawer-overlay"),
-    mobileNotesBtn: document.getElementById("mobile-notes-btn")
+    mobileNotesBtn: document.getElementById("mobile-notes-btn"),
+    toolbarMoreBtn: document.getElementById("toolbar-more-btn"),
+    toolbarMorePanel: document.getElementById("toolbar-more-panel")
   };
 
   const workspaceLayout = document.querySelector(".workspace");
@@ -336,6 +338,10 @@ function bootstrapApp() {
         setNotesDrawer(false);
         return;
       }
+      if (ui.toolbarMorePanel && ui.toolbarMorePanel.classList.contains("is-open")) {
+        setToolbarMoreMenu(false);
+        return;
+      }
       if (ui.headerMenu && ui.headerMenu.classList.contains("open")) {
         closeHeaderMenu();
       }
@@ -350,6 +356,7 @@ function bootstrapApp() {
       setSidebarCollapsed(false);
       updateNotesButtonForSidebar(true);
       closeHeaderMenu();
+      setToolbarMoreMenu(false);
     } else {
       setNotesDrawer(false);
       updateNotesButtonForDrawer(false);
@@ -413,6 +420,50 @@ function bootstrapApp() {
       return;
     }
     closeHeaderMenu();
+  }
+
+  function toggleToolbarMoreMenu(forceOpen) {
+    if (!ui.toolbarMorePanel) return;
+    const isOpen = ui.toolbarMorePanel.classList.contains("is-open");
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !isOpen;
+    setToolbarMoreMenu(shouldOpen);
+  }
+
+  function setToolbarMoreMenu(open) {
+    if (!ui.toolbarMoreBtn || !ui.toolbarMorePanel) return;
+    const shouldOpen = Boolean(open);
+    const isOpen = ui.toolbarMorePanel.classList.contains("is-open");
+
+    if (shouldOpen) {
+      if (!mobileMediaQuery.matches) {
+        ui.toolbarMorePanel.classList.remove("is-open");
+        ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
+        document.removeEventListener("click", handleToolbarOutsideClick);
+        return;
+      }
+      if (!isOpen) {
+        ui.toolbarMorePanel.classList.add("is-open");
+      }
+      ui.toolbarMoreBtn.setAttribute("aria-expanded", "true");
+      document.addEventListener("click", handleToolbarOutsideClick);
+    } else {
+      if (isOpen) {
+        ui.toolbarMorePanel.classList.remove("is-open");
+      }
+      ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
+      document.removeEventListener("click", handleToolbarOutsideClick);
+    }
+  }
+
+  function handleToolbarOutsideClick(event) {
+    if (!ui.toolbarMoreBtn || !ui.toolbarMorePanel) return;
+    if (
+      ui.toolbarMorePanel.contains(event.target) ||
+      ui.toolbarMoreBtn.contains(event.target)
+    ) {
+      return;
+    }
+    setToolbarMoreMenu(false);
   }
 
   function isPermissionDenied(error) {
@@ -1399,6 +1450,14 @@ function bootstrapApp() {
     if (!handledBySelectionHelper || action === "startIteration") {
       focusEditorPreservingSelection();
     }
+    if (
+      mobileMediaQuery.matches &&
+      ui.toolbarMorePanel &&
+      ui.toolbarMorePanel.classList.contains("is-open") &&
+      ui.toolbarMorePanel.contains(button)
+    ) {
+      setToolbarMoreMenu(false);
+    }
   }
 
   async function createNote() {
@@ -1670,6 +1729,9 @@ function bootstrapApp() {
     });
     ui.toolbar.addEventListener("click", handleToolbarClick);
     ui.toolbar.addEventListener("change", handleToolbarChange);
+    if (ui.toolbarMoreBtn) {
+      ui.toolbarMoreBtn.addEventListener("click", () => toggleToolbarMoreMenu());
+    }
     if (ui.clozeFeedback) {
       ui.clozeFeedback.addEventListener("click", handleClozeFeedbackClick);
     }
