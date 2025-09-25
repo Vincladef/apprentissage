@@ -108,9 +108,9 @@
                   <span id="save-status" class="save-status muted"></span>
                 </div>
               </div>
-              <div class="editor-toolbar" aria-label="Outils de mise en forme">
-                <div class="toolbar-quick-actions" role="toolbar" aria-label="Raccourcis de mise en forme">
-                  <div class="toolbar-group toolbar-group--quick">
+              <div class="editor-toolbar" role="toolbar" aria-label="Outils de mise en forme">
+                <div class="toolbar-row toolbar-row--primary" aria-label="Raccourcis de mise en forme">
+                  <div class="toolbar-group" role="group" aria-label="Styles de texte">
                     <button type="button" class="toolbar-button" data-command="bold" title="Gras (Ctrl+B)">
                       <span class="icon" aria-hidden="true">B</span>
                       <span class="sr-only">Gras</span>
@@ -124,7 +124,7 @@
                       <span class="sr-only">Souligner</span>
                     </button>
                   </div>
-                  <div class="toolbar-group toolbar-group--quick">
+                  <div class="toolbar-group" role="group" aria-label="Listes">
                     <button type="button" class="toolbar-button" data-command="insertUnorderedList" title="Liste à puces">
                       <span class="icon" aria-hidden="true">•</span>
                       <span class="sr-only">Liste à puces</span>
@@ -134,7 +134,7 @@
                       <span class="sr-only">Liste numérotée</span>
                     </button>
                   </div>
-                  <div class="toolbar-group toolbar-group--quick">
+                  <div class="toolbar-group toolbar-group--colors" role="group" aria-label="Couleurs">
                     <button
                       type="button"
                       class="toolbar-button color-tool"
@@ -152,20 +152,8 @@
                       <span class="sr-only">Surligner la sélection</span>
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    class="toolbar-button toolbar-more-button"
-                    id="toolbar-more-btn"
-                    aria-haspopup="true"
-                    aria-expanded="false"
-                    aria-controls="toolbar-more-panel"
-                    title="Afficher plus d’options"
-                  >
-                    <span class="icon" aria-hidden="true">⋮</span>
-                    <span class="sr-only">Plus d’outils</span>
-                  </button>
                 </div>
-                <div class="toolbar-more-panel" id="toolbar-more-panel">
+                <div class="toolbar-row toolbar-row--secondary" id="toolbar-more-panel" role="group" aria-label="Options avancées">
                   <div class="toolbar-group toolbar-group--primary">
                     <label class="toolbar-select">
                       <span class="sr-only">Style de texte</span>
