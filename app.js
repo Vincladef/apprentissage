@@ -131,6 +131,8 @@ function bootstrapApp() {
   };
   const CLOZE_DEFER_DATA_KEY = "deferMask";
   const CLOZE_MANUAL_REVEAL_SET_KEY = "revealedClozes";
+  const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
+  const CLOZE_MANUAL_REVEAL_ATTR = "data-manual-reveal";
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
@@ -156,6 +158,7 @@ function bootstrapApp() {
     activeCloze: null,
     pendingRemoteNote: null,
     isEditorFocused: false,
+    savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet()
   };
 
@@ -185,6 +188,7 @@ function bootstrapApp() {
     clozeFeedback: document.getElementById("cloze-feedback")
   };
 
+  showView(null);
   ui.logoutBtn.disabled = true;
   updateFontSizeDisplay();
   if (ui.fontFamily) {
@@ -265,10 +269,17 @@ function bootstrapApp() {
     container.querySelectorAll("script, style").forEach((el) => el.remove());
     container.querySelectorAll("*").forEach((el) => {
       Array.from(el.attributes).forEach((attr) => {
+        if (attr.name === CLOZE_MANUAL_REVEAL_ATTR) {
+          el.removeAttribute(attr.name);
+          return;
+        }
         if (attr.name.startsWith("on")) {
           el.removeAttribute(attr.name);
         }
       });
+      if (el.classList && el.classList.contains("cloze-revealed")) {
+        el.classList.remove("cloze-revealed");
+      }
     });
     return container.innerHTML;
   }
@@ -329,6 +340,7 @@ function bootstrapApp() {
     state.fontSizeIndex = DEFAULT_FONT_SIZE_INDEX;
     state.pendingRemoteNote = null;
     state.isEditorFocused = false;
+    state.savedSelection = null;
     state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
     if (ui.blockFormat) {
       ui.blockFormat.value = "p";
@@ -365,6 +377,7 @@ function bootstrapApp() {
       if (selection) {
         restoreSelection(ui.noteEditor, selection);
       }
+      state.savedSelection = selection || null;
     }
 
     refreshAllClozes();
@@ -376,6 +389,7 @@ function bootstrapApp() {
       updateSaveStatus(state.lastSavedAt ? "saved" : "", state.lastSavedAt || null);
     }
     updateFontSizeDisplay();
+    rememberEditorSelection();
   }
 
   function queueRemoteNoteUpdate(note) {
@@ -573,6 +587,7 @@ function bootstrapApp() {
     state.pendingRemoteNote = null;
     updateSaveStatus("dirty");
     scheduleSave();
+    rememberEditorSelection();
   }
 
   function captureSelection(container) {
@@ -640,6 +655,50 @@ function bootstrapApp() {
     selection.addRange(range);
   }
 
+  function rememberEditorSelection() {
+    if (!ui.noteEditor) {
+      state.savedSelection = null;
+      return;
+    }
+    state.savedSelection = captureSelection(ui.noteEditor);
+  }
+
+  function restoreEditorSelection() {
+    if (!ui.noteEditor || !state.savedSelection) {
+      return false;
+    }
+    restoreSelection(ui.noteEditor, state.savedSelection);
+    return true;
+  }
+
+  function focusEditorPreservingSelection(preservedSelection = null) {
+    if (!ui.noteEditor) return;
+    const selectionToRestore = preservedSelection || state.savedSelection || null;
+    ui.noteEditor.focus({ preventScroll: true });
+    if (selectionToRestore) {
+      restoreSelection(ui.noteEditor, selectionToRestore);
+    }
+    rememberEditorSelection();
+  }
+
+  function runWithPreservedSelection(operation) {
+    if (typeof operation !== "function") {
+      return;
+    }
+    restoreEditorSelection();
+    const result = operation();
+    const updatedSelection = captureSelection(ui.noteEditor);
+    focusEditorPreservingSelection(updatedSelection);
+    return result;
+  }
+
+  function handleSelectionChange() {
+    if (!state.isEditorFocused) {
+      return;
+    }
+    rememberEditorSelection();
+  }
+
   function scheduleSave() {
     if (!state.currentNote) return;
     if (state.pendingSave) {
@@ -698,8 +757,10 @@ function bootstrapApp() {
     const supportHilite =
       typeof document.queryCommandSupported === "function" && document.queryCommandSupported("hiliteColor");
     const command = supportHilite ? "hiliteColor" : "backColor";
-    document.execCommand(command, false, HIGHLIGHT_COLOR);
-    handleEditorInput();
+    runWithPreservedSelection(() => {
+      document.execCommand(command, false, HIGHLIGHT_COLOR);
+      handleEditorInput();
+    });
   }
 
   function generateClozePlaceholder() {
@@ -731,6 +792,9 @@ function bootstrapApp() {
   function shouldMaskCloze(cloze, pointsValue = null) {
     if (!cloze) return true;
     if (cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1") {
+      return false;
+    }
+    if (cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1") {
       return false;
     }
     if (state[CLOZE_MANUAL_REVEAL_SET_KEY] && state[CLOZE_MANUAL_REVEAL_SET_KEY].has(cloze)) {
@@ -847,6 +911,7 @@ function bootstrapApp() {
     let skippedCount = 0;
 
     clozes.forEach((cloze) => {
+      delete cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
       const hadDeferred = cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1";
       if (hadDeferred) {
         delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
@@ -907,17 +972,19 @@ function bootstrapApp() {
 
   function applyFontSize(size) {
     if (!size || !ui.noteEditor) return;
-    document.execCommand("fontSize", false, "7");
-    const fonts = ui.noteEditor.querySelectorAll('font[size="7"]');
-    fonts.forEach((font) => {
-      const span = document.createElement("span");
-      span.style.fontSize = `${size}pt`;
-      while (font.firstChild) {
-        span.appendChild(font.firstChild);
-      }
-      font.replaceWith(span);
+    runWithPreservedSelection(() => {
+      document.execCommand("fontSize", false, "7");
+      const fonts = ui.noteEditor.querySelectorAll('font[size="7"]');
+      fonts.forEach((font) => {
+        const span = document.createElement("span");
+        span.style.fontSize = `${size}pt`;
+        while (font.firstChild) {
+          span.appendChild(font.firstChild);
+        }
+        font.replaceWith(span);
+      });
+      handleEditorInput();
     });
-    handleEditorInput();
   }
 
   function adjustFontSize(delta) {
@@ -930,8 +997,10 @@ function bootstrapApp() {
 
   function applyTextColor(color) {
     const value = typeof color === "string" && color.trim() ? color : DEFAULT_TEXT_COLOR;
-    document.execCommand("foreColor", false, value);
-    handleEditorInput();
+    runWithPreservedSelection(() => {
+      document.execCommand("foreColor", false, value);
+      handleEditorInput();
+    });
   }
 
   function clearActiveCloze() {
@@ -988,6 +1057,7 @@ function bootstrapApp() {
     }
     if (wasMasked) {
       state[CLOZE_MANUAL_REVEAL_SET_KEY].add(cloze);
+      cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
       refreshClozeElement(cloze);
     }
 
@@ -1055,9 +1125,10 @@ function bootstrapApp() {
     if (command === "formatBlock" && value && !value.startsWith("<")) {
       value = `<${value}>`;
     }
-    document.execCommand(command, false, value);
-    handleEditorInput();
-    ui.noteEditor.focus();
+    runWithPreservedSelection(() => {
+      document.execCommand(command, false, value);
+      handleEditorInput();
+    });
   }
 
   function handleToolbarClick(event) {
@@ -1065,29 +1136,42 @@ function bootstrapApp() {
     if (!button || !state.currentNote) return;
     const command = button.dataset.command;
     const action = button.dataset.action;
+    let handledBySelectionHelper = false;
     if (command) {
       let value = button.dataset.value || null;
       if (command === "formatBlock" && value && !/^</.test(value)) {
         value = `<${value}>`;
       }
-      document.execCommand(command, false, value);
-      handleEditorInput();
+      handledBySelectionHelper = true;
+      runWithPreservedSelection(() => {
+        document.execCommand(command, false, value);
+        handleEditorInput();
+      });
     } else if (action) {
       if (action === "applyHighlight") {
+        handledBySelectionHelper = true;
         applyHighlight();
       } else if (action === "applyTextColor") {
+        handledBySelectionHelper = true;
         applyTextColor(button.dataset.value);
       } else if (action === "increaseFontSize") {
+        handledBySelectionHelper = true;
         adjustFontSize(1);
       } else if (action === "decreaseFontSize") {
+        handledBySelectionHelper = true;
         adjustFontSize(-1);
       } else if (action === "createCloze") {
-        createClozeFromSelection();
+        handledBySelectionHelper = true;
+        runWithPreservedSelection(() => {
+          createClozeFromSelection();
+        });
       } else if (action === "startIteration") {
         startNewIteration();
       }
     }
-    ui.noteEditor.focus();
+    if (!handledBySelectionHelper || action === "startIteration") {
+      focusEditorPreservingSelection();
+    }
   }
 
   async function createNote() {
@@ -1341,7 +1425,11 @@ function bootstrapApp() {
     ui.noteEditor.addEventListener("scroll", hideClozeFeedback);
     ui.noteEditor.addEventListener("focus", () => {
       state.isEditorFocused = true;
+      rememberEditorSelection();
     });
+    ui.noteEditor.addEventListener("keyup", rememberEditorSelection);
+    ui.noteEditor.addEventListener("mouseup", rememberEditorSelection);
+    ui.noteEditor.addEventListener("touchend", rememberEditorSelection);
     ui.noteEditor.addEventListener("blur", () => {
       state.isEditorFocused = false;
       if (!state.hasUnsavedChanges) {
@@ -1356,6 +1444,7 @@ function bootstrapApp() {
       ui.clozeFeedback.addEventListener("click", handleClozeFeedbackClick);
     }
     document.addEventListener("click", handleDocumentClick);
+    document.addEventListener("selectionchange", handleSelectionChange);
     window.addEventListener("resize", hideClozeFeedback);
     window.addEventListener("beforeunload", (event) => {
       if (state.hasUnsavedChanges) {
