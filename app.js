@@ -208,7 +208,6 @@ function bootstrapApp() {
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
     clozeFeedback: document.getElementById("cloze-feedback"),
-    sidebarRestore: document.getElementById("restore-sidebar-btn"),
     workspaceOverlay: document.getElementById("drawer-overlay"),
     mobileNotesBtn: document.getElementById("mobile-notes-btn")
   };
@@ -289,15 +288,6 @@ function bootstrapApp() {
   function setupLayoutControls() {
     setSidebarCollapsed(false);
 
-    if (ui.sidebarRestore) {
-      ui.sidebarRestore.addEventListener("click", () => {
-        setSidebarCollapsed(false);
-        if (ui.mobileNotesBtn && !mobileMediaQuery.matches) {
-          ui.mobileNotesBtn.focus();
-        }
-      });
-    }
-
     if (ui.headerMenuBtn && ui.headerMenu) {
       ui.headerMenuBtn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -357,10 +347,6 @@ function bootstrapApp() {
       updateNotesButtonForSidebar(!shouldCollapse);
     }
 
-    if (ui.sidebarRestore) {
-      ui.sidebarRestore.hidden = !shouldCollapse;
-      ui.sidebarRestore.setAttribute("aria-hidden", String(!shouldCollapse));
-    }
   }
 
   function setNotesDrawer(open) {
