@@ -690,6 +690,13 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   text-decoration: underline;
 }
 
+.editor-toolbar .toolbar-more-toggle {
+  display: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.3rem 0.55rem;
+}
+
 .editor-toolbar .color-tool {
   position: relative;
   padding-bottom: 0.55rem;
@@ -1196,6 +1203,34 @@ body.notes-drawer-open .drawer-overlay {
     border-radius: 0.8rem;
     align-self: flex-start;
     flex-shrink: 0;
+    border: 1px solid rgba(15, 23, 42, 0.05);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12), 0 3px 8px rgba(15, 23, 42, 0.08);
+    margin-bottom: 0.75rem;
+  }
+
+  .editor-toolbar .toolbar-more-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    color: var(--muted);
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+    box-shadow: none;
+  }
+
+  .editor-toolbar .toolbar-more-toggle:hover,
+  .editor-toolbar .toolbar-more-toggle:focus-visible {
+    background: rgba(26, 115, 232, 0.12);
+    border-color: rgba(26, 115, 232, 0.3);
+    color: var(--accent-strong);
+  }
+
+  .editor-toolbar .toolbar-more-toggle[aria-expanded="true"] {
+    background: rgba(26, 115, 232, 0.16);
+    border-color: rgba(26, 115, 232, 0.38);
+    color: var(--accent-strong);
   }
 
   .toolbar-row {
@@ -1229,6 +1264,17 @@ body.notes-drawer-open .drawer-overlay {
     flex-wrap: nowrap;
   }
 
+  .toolbar-row--secondary {
+    display: none;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    padding-top: 0.45rem;
+    margin-top: 0;
+  }
+
+  .toolbar-row--secondary.is-open {
+    display: flex;
+  }
+
   .toolbar-group .toolbar-button {
     min-width: 2.05rem;
     min-height: 2.05rem;
@@ -1247,6 +1293,14 @@ body.notes-drawer-open .drawer-overlay {
   .font-size-control {
     min-width: 110px;
     flex: 0 0 auto;
+  }
+
+  #toolbar-more-panel .toolbar-select {
+    min-width: 108px;
+  }
+
+  #toolbar-more-panel .font-size-control {
+    min-width: 96px;
   }
 
   .editor {
