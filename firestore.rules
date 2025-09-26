@@ -6,91 +6,27 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function ownerEmail(userId) {
-      // Adaptez le domaine si vous modifiez AUTH_EMAIL_DOMAIN dans app.js.
-      return userId + '@pseudo.apprentissage';
+    function hasMatchingPseudo(userId) {
+      return request.auth != null &&
+             request.auth.token.email != null &&
+             request.auth.token.email.startsWith(userId + '@');
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.token.email == ownerEmail(userId);
-    }
-
-    function stringMax(value, maxLen) {
-      return value is string && value.size() <= maxLen;
-    }
-
-    function optionalString(value, maxLen) {
-      return value == null || stringMax(value, maxLen);
-    }
-
-    function isServerTimestamp(value) {
-      return value is timestamp && value == request.time;
-    }
-
-    function isVisibility(value) {
-      return value is string && (value == "public" || value == "private");
-    }
-
-    function userHasValidKeys(data) {
-      return data.keys().hasOnly(['createdAt', 'visibility', 'displayName']);
-    }
-
-    function canCreateUser(data) {
-      return userHasValidKeys(data) &&
-             isServerTimestamp(data.createdAt) &&
-             isVisibility(data.visibility) &&
-             optionalString(data.displayName, 120);
-    }
-
-    function canUpdateUserProfile(newData, existingData) {
-      return userHasValidKeys(newData) &&
-             newData.createdAt == existingData.createdAt &&
-             isVisibility(newData.visibility) &&
-             optionalString(newData.displayName, 120);
-    }
-
-    function noteHasValidKeys(data) {
-      return data.keys().hasOnly(['title', 'contentHtml', 'createdAt', 'updatedAt']);
-    }
-
-    function canCreateNote(data) {
-      return noteHasValidKeys(data) &&
-             stringMax(data.title, 200) &&
-             optionalString(data.contentHtml, 50000) &&
-             isServerTimestamp(data.createdAt) &&
-             isServerTimestamp(data.updatedAt);
-    }
-
-    function canUpdateNote(newData, existingData) {
-      return noteHasValidKeys(newData) &&
-             stringMax(newData.title, 200) &&
-             optionalString(newData.contentHtml, 50000) &&
-             newData.createdAt == existingData.createdAt &&
-             isServerTimestamp(newData.updatedAt);
+      return hasMatchingPseudo(userId);
     }
 
     match /users/{userId} {
-      allow get: if isOwner(userId) || resource.data.visibility == "public";
-      allow list: if request.query.where("visibility", "==", "public");
+      // Profils lisibles par tous pour faciliter l'inscription et la recherche.
+      allow read: if true;
 
-      allow create: if isOwner(userId) &&
-                    canCreateUser(request.resource.data);
-
-      allow update: if isOwner(userId) &&
-                    canUpdateUserProfile(request.resource.data, resource.data);
-
-      allow delete: if isOwner(userId);
+      // Création et mises à jour réservées au propriétaire authentifié
+      // (peu importe le domaine de son adresse).
+      allow create, update, delete: if isOwner(userId);
 
       match /notes/{noteId} {
         allow read: if isOwner(userId);
-
-        allow create: if isOwner(userId) &&
-                      canCreateNote(request.resource.data);
-
-        allow update: if isOwner(userId) &&
-                      canUpdateNote(request.resource.data, resource.data);
-
-        allow delete: if isOwner(userId);
+        allow create, update, delete: if isOwner(userId);
       }
     }
   }
