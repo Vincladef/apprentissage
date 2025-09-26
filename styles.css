@@ -1670,14 +1670,16 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .brand {
-    row-gap: 0.25rem;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: 0.5rem;
   }
 
   .header-top-controls {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    justify-self: end;
   }
 
   .app-main {
