@@ -734,6 +734,41 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   color: var(--accent-strong);
 }
 
+@media (max-width: 900px) {
+  .note-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    padding-left: calc(var(--note-depth, 0) * 1.1rem);
+  }
+
+  .note-card {
+    flex: 1 1 100%;
+  }
+
+  .note-row-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+  }
+
+  .note-row-actions .icon-button {
+    width: auto;
+    height: auto;
+    min-width: 2.4rem;
+    min-height: 2.4rem;
+  }
+
+  .icon-button {
+    min-width: 2.4rem;
+    min-height: 2.4rem;
+  }
+
+  .note-children {
+    margin-left: 0.5rem;
+    padding-left: 0.55rem;
+  }
+}
+
 .editor-area {
   background: transparent;
   border-radius: 0;
