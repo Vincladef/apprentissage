@@ -1447,8 +1447,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .drawer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(30, 42, 50, 0.25);
-  backdrop-filter: blur(3px);
+  background: rgba(30, 42, 50, 0.35);
   z-index: 120;
   transition: opacity 0.2s ease;
   opacity: 0;
