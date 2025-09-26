@@ -21,8 +21,8 @@ service cloud.firestore {
     }
 
     function hasMatchingPseudo(userId) {
-      let email = normalizedAuthEmail();
-      return email != null && email == expectedEmailFor(userId);
+      return (let email = normalizedAuthEmail();
+        email != null && email == expectedEmailFor(userId));
     }
 
     function userRecord(userId) {
@@ -30,20 +30,17 @@ service cloud.firestore {
     }
 
     function ownerMatches(userId) {
-      if (!isSignedIn()) {
-        return false;
-      }
-      let record = userRecord(userId);
-      if (!record.exists()) {
-        return false;
-      }
-      if (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) {
-        return true;
-      }
-      let email = normalizedAuthEmail();
-      return email != null &&
-        record.data.ownerEmail is string &&
-        lower(record.data.ownerEmail) == email;
+      return isSignedIn() &&
+        (let record = userRecord(userId);
+          record.exists() &&
+          (
+            (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) ||
+            (let email = normalizedAuthEmail();
+              email != null &&
+              record.data.ownerEmail is string &&
+              lower(record.data.ownerEmail) == email)
+          )
+        );
     }
 
     function isOwner(userId) {
@@ -51,14 +48,14 @@ service cloud.firestore {
     }
 
     function ensureOwnerFields() {
-      let email = normalizedAuthEmail();
       return request.auth != null &&
         request.auth.uid != null &&
         request.resource.data.ownerUid is string &&
         request.resource.data.ownerUid == request.auth.uid &&
-        email != null &&
-        request.resource.data.ownerEmail is string &&
-        lower(request.resource.data.ownerEmail) == email;
+        (let email = normalizedAuthEmail();
+          email != null &&
+          request.resource.data.ownerEmail is string &&
+          lower(request.resource.data.ownerEmail) == email);
     }
 
     match /users/{userId} {
