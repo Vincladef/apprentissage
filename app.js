@@ -2886,11 +2886,24 @@ function bootstrapApp() {
         ? options.displayName.trim()
         : "";
 
+    const providedUser = options.user;
+    const authUser =
+      providedUser && typeof providedUser === "object" ? providedUser : auth.currentUser;
+    const ownerUid = authUser?.uid || auth.currentUser?.uid || null;
+    const ownerEmailRaw = authUser?.email || auth.currentUser?.email || buildAuthEmail(pseudo);
+    const ownerEmail = ownerEmailRaw ? ownerEmailRaw.toLowerCase() : null;
+
+    if (!ownerUid || !ownerEmail) {
+      throw new Error("Utilisateur authentifié invalide : UID ou e-mail manquant.");
+    }
+
     const snap = await getDoc(ref);
     if (!snap.exists()) {
       const newData = {
         createdAt: serverTimestamp(),
         visibility: desiredVisibility,
+        ownerUid,
+        ownerEmail,
       };
       if (desiredDisplayName) {
         newData.displayName = desiredDisplayName;
@@ -2917,6 +2930,16 @@ function bootstrapApp() {
     if (desiredDisplayName && resolvedDisplayName !== desiredDisplayName) {
       updates.displayName = desiredDisplayName;
       resolvedDisplayName = desiredDisplayName;
+    }
+
+    if (typeof data.ownerUid !== "string" || data.ownerUid !== ownerUid) {
+      updates.ownerUid = ownerUid;
+    }
+
+    const currentOwnerEmail =
+      typeof data.ownerEmail === "string" ? data.ownerEmail.toLowerCase() : "";
+    if (!currentOwnerEmail || currentOwnerEmail !== ownerEmail) {
+      updates.ownerEmail = ownerEmail;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -3180,6 +3203,7 @@ function bootstrapApp() {
       const ensuredUser = await ensureUserExists(pseudoKey, {
         visibility: state.pendingVisibility,
         displayName,
+        user: credential?.user || auth.currentUser,
       });
       if (ensuredUser?.visibility) {
         state.pendingVisibility = ensuredUser.visibility;

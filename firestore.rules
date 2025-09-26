@@ -2,31 +2,73 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function authEmailDomain() {
+      return "pseudo.apprentissage";
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function normalizedAuthEmail() {
+      return isSignedIn() && request.auth.token.email != null
+        ? lower(request.auth.token.email)
+        : null;
+    }
+
+    function expectedEmailFor(userId) {
+      return lower(userId) + "@" + authEmailDomain();
+    }
+
     function hasMatchingPseudo(userId) {
-      return request.auth != null &&
-             request.auth.token.email != null &&
-             request.auth.token.email.startsWith(userId + '@');
+      let email = normalizedAuthEmail();
+      return email != null && email == expectedEmailFor(userId);
+    }
+
+    function userRecord(userId) {
+      return get(/databases/$(database)/documents/users/$(userId));
+    }
+
+    function ownerMatches(userId) {
+      if (!isSignedIn()) {
+        return false;
+      }
+      let record = userRecord(userId);
+      if (!record.exists()) {
+        return false;
+      }
+      if (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) {
+        return true;
+      }
+      let email = normalizedAuthEmail();
+      return email != null &&
+        record.data.ownerEmail is string &&
+        lower(record.data.ownerEmail) == email;
     }
 
     function isOwner(userId) {
-      return hasMatchingPseudo(userId);
+      return hasMatchingPseudo(userId) || ownerMatches(userId);
+    }
+
+    function ensureOwnerFields() {
+      let email = normalizedAuthEmail();
+      return request.auth != null &&
+        request.auth.uid != null &&
+        request.resource.data.ownerUid is string &&
+        request.resource.data.ownerUid == request.auth.uid &&
+        email != null &&
+        request.resource.data.ownerEmail is string &&
+        lower(request.resource.data.ownerEmail) == email;
     }
 
     match /users/{userId} {
-      // Profils lisibles par tous pour faciliter l'inscription et la recherche.
+      allow create: if isSignedIn() && hasMatchingPseudo(userId) && ensureOwnerFields();
       allow read: if true;
-
-      // Création et mises à jour réservées au propriétaire authentifié
-      // (peu importe le domaine de son adresse).
-      allow create, update, delete: if isOwner(userId);
+      allow update: if isOwner(userId) && ensureOwnerFields();
+      allow delete: if isOwner(userId);
 
       match /notes/{noteId} {
-        allow read: if isOwner(userId);
-        allow create, update, delete: if isOwner(userId);
+        allow read, create, update, delete: if isOwner(userId);
       }
     }
   }
