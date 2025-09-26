@@ -1484,6 +1484,19 @@ function bootstrapApp() {
     range.insertNode(wrapper);
     refreshClozeElement(wrapper);
 
+    const selection = window.getSelection();
+    if (selection && wrapper.parentNode) {
+      try {
+        const afterRange = document.createRange();
+        afterRange.setStartAfter(wrapper);
+        afterRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(afterRange);
+      } catch (error) {
+        console.error("Impossible de positionner le curseur après le trou", error);
+      }
+    }
+
     return true;
   }
 
