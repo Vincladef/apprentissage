@@ -158,7 +158,6 @@ input[type="text"]:focus {
 .header-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
   align-content: center;
@@ -183,6 +182,10 @@ input[type="text"]:focus {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex: 1 1 280px;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 0.35rem;
 }
 
 .brand-text {
@@ -224,11 +227,17 @@ input[type="text"]:focus {
   color: var(--accent-strong);
 }
 
-.header-actions {
+.header-top-controls {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
+.header-menu-wrapper {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
 #revision-mode-toggle {
@@ -361,7 +370,7 @@ body.header-collapsed .header-toolbar {
 }
 
 body.header-collapsed .brand-text,
-body.header-collapsed .header-actions {
+body.header-collapsed .header-top-controls {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -1656,6 +1665,21 @@ body.notes-drawer-open .drawer-overlay {
     --toolbar-sticky-gap: 0.4rem;
   }
 
+  .header-top {
+    gap: 0.5rem;
+  }
+
+  .brand {
+    row-gap: 0.25rem;
+  }
+
+  .header-top-controls {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
   .app-main {
     padding: 1rem 1rem 1.75rem;
   }
@@ -1850,7 +1874,7 @@ body.revision-mode .drawer-overlay {
   display: none !important;
 }
 
-body.revision-mode .header-actions > *:not(#revision-mode-toggle):not(#revision-iteration-btn) {
+body.revision-mode .header-top-controls > *:not(#revision-mode-toggle) {
   display: none !important;
 }
 
