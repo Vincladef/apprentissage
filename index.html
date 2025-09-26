@@ -32,42 +32,44 @@
             <h1>Apprentissage actif</h1>
             <p class="subtitle">Des fiches simples, prêtes à apprendre.</p>
           </div>
-        </div>
-        <div class="header-actions">
-          <button
-            type="button"
-            id="revision-mode-toggle"
-            class="header-mode-toggle ghost"
-            aria-pressed="false"
-            aria-label="Activer le mode révision"
-          >
-            Mode révision
-          </button>
-          <button
-            type="button"
-            id="revision-iteration-btn"
-            class="header-iteration-btn"
-            aria-label="Lancer une nouvelle itération"
-          >
-            Nouvelle itération
-          </button>
-          <button
-            type="button"
-            id="workspace-menu-btn"
-            class="header-menu-toggle"
-            aria-haspopup="true"
-            aria-expanded="false"
-            aria-label="Ouvrir le menu principal"
-          >
-            ⋮
-          </button>
-          <div id="workspace-menu" class="header-menu" role="menu">
-            <p class="menu-meta" role="none">
-              Connecté en tant que <span id="current-user" class="menu-meta-strong"></span>
-            </p>
-            <button id="logout-btn" class="menu-item" role="menuitem">Se déconnecter</button>
+          <div class="header-top-controls">
+            <button
+              type="button"
+              id="revision-mode-toggle"
+              class="header-mode-toggle ghost"
+              aria-pressed="false"
+              aria-label="Activer le mode révision"
+            >
+              Mode révision
+            </button>
+            <div class="header-menu-wrapper">
+              <button
+                type="button"
+                id="workspace-menu-btn"
+                class="header-menu-toggle"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-label="Ouvrir le menu principal"
+              >
+                ⋮
+              </button>
+              <div id="workspace-menu" class="header-menu" role="menu">
+                <p class="menu-meta" role="none">
+                  Connecté en tant que <span id="current-user" class="menu-meta-strong"></span>
+                </p>
+                <button id="logout-btn" class="menu-item" role="menuitem">Se déconnecter</button>
+              </div>
+            </div>
           </div>
         </div>
+        <button
+          type="button"
+          id="revision-iteration-btn"
+          class="header-iteration-btn"
+          aria-label="Lancer une nouvelle itération"
+        >
+          Nouvelle itération
+        </button>
       </div>
       <div class="header-toolbar">
         <div class="editor-toolbar" role="toolbar" aria-label="Outils de mise en forme">
