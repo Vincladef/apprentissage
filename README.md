@@ -24,6 +24,7 @@ Application web de prise de notes et de révision active avec texte à trous et 
 
 - **Erreur `FirebaseError: Firebase: Error (auth/configuration-not-found)` lors de la connexion** : soit l’application pointe encore vers la configuration d’exemple (vérifiez que toutes les valeurs du fichier `firebase-config.js` ont été remplacées par celles de votre projet), soit la méthode de connexion *Email/Mot de passe* n’est pas activée dans la console Firebase (*Authentication* > *Méthode de connexion*).
 - **Erreur `FirebaseError: Missing or insufficient permissions` en chargeant ou en créant une fiche** : vos règles de sécurité Firestore ne correspondent pas à celles du projet. Importez le fichier `firestore.rules` dans la console Firebase ou déployez-le via l’outil CLI (`firebase deploy --only firestore:rules`) puis adaptez la fonction `isOwner` si vous avez modifié la constante `AUTH_EMAIL_DOMAIN` dans `app.js`.
+- **Erreur `FirebaseError: Missing or insufficient permissions` lors du chargement des comptes publics** : la collection `users` est protégée par les mêmes règles Firestore. Déployez le fichier `firestore.rules` fourni (ou appliquez les équivalents via la console) pour autoriser la lecture des profils dont `visibility` vaut `public`, puis vérifiez que `AUTH_EMAIL_DOMAIN` côté frontend correspond au domaine autorisé par la règle `isOwner`.
 
 ## Développement local
 

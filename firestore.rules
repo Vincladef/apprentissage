@@ -70,7 +70,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || resource.data.visibility == "public";
+      allow get: if isOwner(userId) || resource.data.visibility == "public";
+      allow list: if request.query.where("visibility", "==", "public");
 
       allow create: if isOwner(userId) &&
                     canCreateUser(request.resource.data);
