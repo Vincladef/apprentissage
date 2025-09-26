@@ -1449,7 +1449,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   inset: 0;
   background: rgba(30, 42, 50, 0.25);
   backdrop-filter: blur(3px);
-  z-index: 22;
+  z-index: 120;
   transition: opacity 0.2s ease;
   opacity: 0;
   pointer-events: none;
@@ -1516,7 +1516,7 @@ body.notes-drawer-open .drawer-overlay {
     transform: translateX(-110%);
     opacity: 1;
     padding: 1.5rem 1.2rem 2rem;
-    z-index: 25;
+    z-index: 120;
     box-shadow: 0 16px 32px rgba(60, 64, 67, 0.24);
   }
 
