@@ -224,6 +224,7 @@ function bootstrapApp() {
   const rootElement = document.documentElement;
   const headerElement = document.querySelector(".app-header");
   const visualViewport = window.visualViewport ?? null;
+  const mobileMediaQuery = window.matchMedia("(max-width: 900px)");
 
   const KEYBOARD_VISIBLE_CLASS = "keyboard-visible";
   const KEYBOARD_HEIGHT_THRESHOLD = 120;
@@ -426,7 +427,6 @@ function bootstrapApp() {
     ui.blockFormat.value = "p";
   }
 
-  const mobileMediaQuery = window.matchMedia("(max-width: 900px)");
   setupLayoutControls();
   handleResponsiveState(mobileMediaQuery);
   if (typeof mobileMediaQuery.addEventListener === "function") {
