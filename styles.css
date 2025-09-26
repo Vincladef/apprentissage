@@ -94,6 +94,10 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+#mobile-add-note-btn {
+  display: none;
+}
+
 button.secondary {
   background: rgba(26, 115, 232, 0.08);
   color: var(--accent-strong);
@@ -735,6 +739,21 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 @media (max-width: 900px) {
+  #mobile-add-note-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0));
+    right: 1.5rem;
+    padding: 0.85rem 1.4rem;
+    border-radius: 999px;
+    font-size: 1rem;
+    box-shadow: 0 12px 28px rgba(26, 115, 232, 0.35);
+    z-index: 80;
+    white-space: nowrap;
+  }
+
   .note-row {
     flex-wrap: wrap;
     align-items: flex-start;

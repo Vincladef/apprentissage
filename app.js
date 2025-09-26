@@ -225,6 +225,7 @@ function bootstrapApp() {
     headerMenuBtn: document.getElementById("workspace-menu-btn"),
     headerMenu: document.getElementById("workspace-menu"),
     addNoteBtn: document.getElementById("add-note-btn"),
+    mobileAddNoteBtn: document.getElementById("mobile-add-note-btn"),
     notesContainer: document.getElementById("notes-container"),
     noteTitle: document.getElementById("note-title"),
     noteEditor: document.getElementById("note-editor"),
@@ -246,6 +247,19 @@ function bootstrapApp() {
     revisionModeToggle: document.getElementById("revision-mode-toggle"),
     revisionIterationBtn: document.getElementById("revision-iteration-btn"),
   };
+
+  if (ui.mobileAddNoteBtn && ui.addNoteBtn) {
+    const referenceLabel =
+      ui.addNoteBtn.getAttribute("aria-label")?.trim() ||
+      ui.addNoteBtn.textContent?.trim() ||
+      "";
+
+    if (referenceLabel) {
+      ui.mobileAddNoteBtn.setAttribute("aria-label", referenceLabel);
+    } else {
+      ui.mobileAddNoteBtn.removeAttribute("aria-label");
+    }
+  }
 
   ui.visibilityInputs = ui.loginForm
     ? Array.from(ui.loginForm.querySelectorAll("input[name='visibility']"))
@@ -3328,6 +3342,22 @@ function bootstrapApp() {
         console.error(error);
       });
     });
+    if (ui.mobileAddNoteBtn) {
+      ui.mobileAddNoteBtn.addEventListener("click", () => {
+        try {
+          Promise.resolve(createNote())
+            .catch((error) => {
+              console.error(error);
+            })
+            .finally(() => {
+              setNotesDrawer(false);
+            });
+        } catch (error) {
+          console.error(error);
+          setNotesDrawer(false);
+        }
+      });
+    }
     ui.noteTitle.addEventListener("input", handleTitleInput);
     ui.noteEditor.addEventListener("input", handleEditorInput);
     ui.noteEditor.addEventListener("click", handleEditorClick);
