@@ -814,6 +814,35 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   font-variant-numeric: tabular-nums;
 }
 
+@media (min-width: 901px) {
+  .toolbar-group--primary {
+    flex: 0 1 auto;
+  }
+
+  .toolbar-select {
+    flex: 0 1 auto;
+    padding: 0 0.25rem;
+    min-height: 1.6rem;
+    min-width: 100px;
+  }
+
+  .toolbar-group--primary > .toolbar-select,
+  .toolbar-group--primary > .font-size-control {
+    flex: 0 1 auto;
+  }
+
+  .font-size-control {
+    gap: 0.25rem;
+    padding: 0.15rem 0.25rem;
+    min-height: 1.6rem;
+    min-width: 90px;
+  }
+
+  .font-size-control #font-size-value {
+    min-width: 2ch;
+  }
+}
+
 .editor-toolbar .toolbar-button {
   background: #f8f9fa;
   border-radius: 0.5rem;
