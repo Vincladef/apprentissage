@@ -611,6 +611,10 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   gap: 0.4rem;
 }
 
+.toolbar-group--actions {
+  gap: 0.35rem;
+}
+
 .toolbar-group--primary > .toolbar-select {
   flex: 1 1 180px;
 }
@@ -719,6 +723,12 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .editor-toolbar .toolbar-button[data-command="underline"] .icon {
   text-decoration: underline;
+}
+
+.editor-toolbar .toolbar-button[data-action="createCloze"] .icon,
+.editor-toolbar .toolbar-button[data-action="startIteration"] .icon {
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .editor-toolbar .toolbar-more-toggle {
@@ -1123,6 +1133,10 @@ body.notes-drawer-open .drawer-overlay {
     justify-content: flex-start;
   }
 
+  .toolbar-group.toolbar-group--actions {
+    justify-content: flex-start;
+  }
+
   .toolbar-group--primary {
     flex-direction: column;
     align-items: stretch;
@@ -1288,6 +1302,10 @@ body.notes-drawer-open .drawer-overlay {
   .toolbar-group.toolbar-group--primary {
     flex-direction: row;
     align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .toolbar-group.toolbar-group--actions {
     flex-wrap: nowrap;
   }
 
