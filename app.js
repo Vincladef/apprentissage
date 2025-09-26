@@ -3026,9 +3026,13 @@ function bootstrapApp() {
       (error) => {
         console.error("Erreur lors du chargement des comptes publics", error);
         updatePublicUsersList([]);
+        if (isPermissionDenied(error)) {
+          reportPermissionIssue("Lecture des comptes publics refusée par Firestore");
+        }
         if (ui.publicUsersEmpty) {
-          ui.publicUsersEmpty.textContent =
-            "Impossible de charger les comptes publics pour le moment.";
+          ui.publicUsersEmpty.textContent = isPermissionDenied(error)
+            ? "Activez les règles Firestore fournies dans firestore.rules pour afficher les comptes publics."
+            : "Impossible de charger les comptes publics pour le moment.";
           ui.publicUsersEmpty.classList.remove("hidden");
         }
       }
@@ -3105,6 +3109,11 @@ function bootstrapApp() {
     } catch (error) {
       console.error(error);
       let message = "Impossible de se connecter";
+      if (isPermissionDenied(error)) {
+        reportPermissionIssue("Connexion refusée par Firestore");
+        message =
+          "Permissions Firestore insuffisantes pour se connecter. Consultez la console pour les étapes de configuration.";
+      }
       switch (error?.code) {
         case "auth/invalid-email":
         case "auth/missing-email":
