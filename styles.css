@@ -739,19 +739,22 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 @media (max-width: 900px) {
+  .note-list-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  #add-note-btn {
+    display: none;
+  }
+
   #mobile-add-note-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    position: fixed;
-    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0));
-    right: 1.5rem;
-    padding: 0.85rem 1.4rem;
-    border-radius: 999px;
-    font-size: 1rem;
-    box-shadow: 0 12px 28px rgba(26, 115, 232, 0.35);
-    z-index: 80;
-    white-space: nowrap;
+    width: 100%;
   }
 
   .note-row {
@@ -1475,9 +1478,9 @@ body.notes-drawer-open .drawer-overlay {
   }
 
   .note-list-actions {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.6rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
   }
 
   #restore-sidebar-btn {
