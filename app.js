@@ -9,6 +9,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   updateDoc,
   deleteDoc,
   serverTimestamp
@@ -161,6 +162,7 @@ function bootstrapApp() {
     pseudo: null,
     displayName: null,
     pendingDisplayName: null,
+    pendingVisibility: null,
     notesUnsubscribe: null,
     notes: [],
     currentNoteId: null,
@@ -176,6 +178,9 @@ function bootstrapApp() {
     isRevisionMode: false,
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
+    visibility: null,
+    publicUsers: [],
+    publicUsersUnsubscribe: null,
   };
 
   function getManualRevealSet() {
@@ -194,6 +199,9 @@ function bootstrapApp() {
     loginForm: document.getElementById("login-form"),
     pseudoInput: document.getElementById("pseudo"),
     loginButton: document.querySelector("#login-form button[type='submit']"),
+    publicAccountsSection: document.getElementById("public-accounts"),
+    publicUsersList: document.getElementById("public-users-list"),
+    publicUsersEmpty: document.getElementById("public-users-empty"),
     currentUser: document.getElementById("current-user"),
     logoutBtn: document.getElementById("logout-btn"),
     headerMenuBtn: document.getElementById("workspace-menu-btn"),
@@ -218,6 +226,17 @@ function bootstrapApp() {
     revisionModeToggle: document.getElementById("revision-mode-toggle"),
     revisionIterationBtn: document.getElementById("revision-iteration-btn"),
   };
+
+  ui.visibilityInputs = ui.loginForm
+    ? Array.from(ui.loginForm.querySelectorAll("input[name='visibility']"))
+    : [];
+  ui.visibilityField = ui.loginForm?.elements?.namedItem("visibility") ?? null;
+  if (ui.publicUsersList) {
+    ui.publicUsersList.setAttribute("aria-live", "polite");
+  }
+  const defaultPublicUsersEmptyMessage = ui.publicUsersEmpty?.textContent?.trim()
+    ? ui.publicUsersEmpty.textContent
+    : "Aucun compte public pour le moment.";
 
   const workspaceLayout = document.querySelector(".workspace");
   const bodyElement = document.body;
@@ -684,6 +703,10 @@ function bootstrapApp() {
       .replace(/-+/g, "-")
       .replace(/^[.-]+|[.-]+$/g, "");
     return { pseudoKey: safe, displayName: trimmed };
+  }
+
+  function sanitizeVisibility(rawVisibility) {
+    return rawVisibility === "public" ? "public" : "private";
   }
 
   function buildAuthEmail(pseudoKey) {
@@ -2031,14 +2054,55 @@ function bootstrapApp() {
     }
   }
 
-  async function ensureUserExists(pseudo) {
+  async function ensureUserExists(pseudo, options = {}) {
     const ref = doc(db, "users", pseudo);
+    const desiredVisibility = sanitizeVisibility(options.visibility);
+    const desiredDisplayName =
+      typeof options.displayName === "string" && options.displayName.trim()
+        ? options.displayName.trim()
+        : "";
+
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      await setDoc(ref, {
-        createdAt: serverTimestamp()
-      });
+      const newData = {
+        createdAt: serverTimestamp(),
+        visibility: desiredVisibility,
+      };
+      if (desiredDisplayName) {
+        newData.displayName = desiredDisplayName;
+      }
+      await setDoc(ref, newData);
+      return {
+        visibility: desiredVisibility,
+        displayName: desiredDisplayName || null,
+      };
     }
+
+    const data = snap.data() || {};
+    const updates = {};
+    let resolvedVisibility = data.visibility === "public" ? "public" : "private";
+    if (!("visibility" in data) || resolvedVisibility !== desiredVisibility) {
+      updates.visibility = desiredVisibility;
+      resolvedVisibility = desiredVisibility;
+    }
+
+    let resolvedDisplayName =
+      typeof data.displayName === "string" && data.displayName.trim()
+        ? data.displayName.trim()
+        : "";
+    if (desiredDisplayName && resolvedDisplayName !== desiredDisplayName) {
+      updates.displayName = desiredDisplayName;
+      resolvedDisplayName = desiredDisplayName;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(ref, updates);
+    }
+
+    return {
+      visibility: resolvedVisibility,
+      displayName: resolvedDisplayName || null,
+    };
   }
 
   function subscribeToNotes() {
@@ -2064,6 +2128,107 @@ function bootstrapApp() {
     );
   }
 
+  function updatePublicUsersList(users) {
+    state.publicUsers = users;
+    if (!ui.publicUsersList || !ui.publicUsersEmpty) {
+      return;
+    }
+    ui.publicUsersList.innerHTML = "";
+    if (!users || users.length === 0) {
+      ui.publicUsersEmpty.textContent = defaultPublicUsersEmptyMessage;
+      ui.publicUsersEmpty.classList.remove("hidden");
+      return;
+    }
+    ui.publicUsersEmpty.classList.add("hidden");
+    const fragment = document.createDocumentFragment();
+    users.forEach((userInfo) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "public-user-button";
+      button.dataset.pseudo = userInfo.id;
+      button.setAttribute("role", "listitem");
+      button.title = `Utiliser le compte public ${userInfo.displayName}`;
+
+      const name = document.createElement("span");
+      name.className = "public-user-name";
+      name.textContent = userInfo.displayName;
+
+      const pseudo = document.createElement("span");
+      pseudo.className = "public-user-pseudo";
+      pseudo.textContent = `@${userInfo.id}`;
+
+      button.append(name, pseudo);
+      fragment.appendChild(button);
+    });
+    ui.publicUsersList.appendChild(fragment);
+  }
+
+  function subscribeToPublicUsers() {
+    if (!ui.publicUsersList) {
+      return;
+    }
+    if (state.publicUsersUnsubscribe) {
+      state.publicUsersUnsubscribe();
+      state.publicUsersUnsubscribe = null;
+    }
+    const usersRef = collection(db, "users");
+    const publicUsersQuery = query(usersRef, where("visibility", "==", "public"));
+    state.publicUsersUnsubscribe = onSnapshot(
+      publicUsersQuery,
+      (snapshot) => {
+        const users = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() || {};
+          if (sanitizeVisibility(data.visibility) !== "public") {
+            return;
+          }
+          const displayName =
+            typeof data.displayName === "string" && data.displayName.trim()
+              ? data.displayName.trim()
+              : docSnap.id;
+          users.push({ id: docSnap.id, displayName });
+        });
+        users.sort((a, b) => {
+          const nameOrder = a.displayName.localeCompare(b.displayName, "fr", {
+            sensitivity: "base",
+          });
+          if (nameOrder !== 0) {
+            return nameOrder;
+          }
+          return a.id.localeCompare(b.id, "fr", { sensitivity: "base" });
+        });
+        updatePublicUsersList(users);
+      },
+      (error) => {
+        console.error("Erreur lors du chargement des comptes publics", error);
+        updatePublicUsersList([]);
+        if (ui.publicUsersEmpty) {
+          ui.publicUsersEmpty.textContent =
+            "Impossible de charger les comptes publics pour le moment.";
+          ui.publicUsersEmpty.classList.remove("hidden");
+        }
+      }
+    );
+  }
+
+  function handlePublicUsersClick(event) {
+    const source = event.target instanceof Element ? event.target : null;
+    const target = source?.closest("[data-pseudo]");
+    if (!target) {
+      return;
+    }
+    const pseudo = target.getAttribute("data-pseudo");
+    if (!pseudo || !ui.pseudoInput) {
+      return;
+    }
+    ui.pseudoInput.value = pseudo;
+    ui.pseudoInput.focus();
+    const publicOption = ui.visibilityInputs.find((input) => input.value === "public");
+    if (publicOption) {
+      publicOption.checked = true;
+    }
+  }
+
   function resetState() {
     if (state.notesUnsubscribe) {
       state.notesUnsubscribe();
@@ -2073,6 +2238,11 @@ function bootstrapApp() {
       clearTimeout(state.pendingSave);
       state.pendingSave = null;
     }
+    state.pseudo = null;
+    state.displayName = null;
+    state.visibility = null;
+    state.pendingDisplayName = null;
+    state.pendingVisibility = null;
     state.notes = [];
     state.currentNoteId = null;
     state.currentNote = null;
@@ -2090,6 +2260,7 @@ function bootstrapApp() {
   async function handleLoginSubmit(event) {
     event.preventDefault();
     const { pseudoKey, displayName } = normalizePseudoInput(ui.pseudoInput.value);
+    const selectedVisibility = sanitizeVisibility(ui.visibilityField?.value);
     if (!pseudoKey || pseudoKey.length < MIN_PSEUDO_LENGTH) {
       showToast(
         `Pseudo invalide. Utilisez au moins ${MIN_PSEUDO_LENGTH} caractères autorisés (lettres, chiffres, . _ -).`,
@@ -2099,8 +2270,12 @@ function bootstrapApp() {
     }
     ui.loginButton.disabled = true;
     ui.pseudoInput.disabled = true;
+    ui.visibilityInputs.forEach((input) => {
+      input.disabled = true;
+    });
+    state.pendingVisibility = selectedVisibility;
     try {
-      await login(pseudoKey, displayName);
+      await login(pseudoKey, displayName, selectedVisibility);
     } catch (error) {
       console.error(error);
       let message = "Impossible de se connecter";
@@ -2130,11 +2305,15 @@ function bootstrapApp() {
     } finally {
       ui.loginButton.disabled = false;
       ui.pseudoInput.disabled = false;
+      ui.visibilityInputs.forEach((input) => {
+        input.disabled = false;
+      });
     }
   }
 
-  async function login(pseudoKey, displayName) {
+  async function login(pseudoKey, displayName, visibility) {
     state.pendingDisplayName = displayName;
+    state.pendingVisibility = sanitizeVisibility(visibility);
     const email = buildAuthEmail(pseudoKey);
     const password = buildAuthPassword(pseudoKey);
     try {
@@ -2163,19 +2342,34 @@ function bootstrapApp() {
           console.warn("Impossible de mettre à jour le profil", profileError);
         }
       }
-      await ensureUserExists(pseudoKey);
+      const ensuredUser = await ensureUserExists(pseudoKey, {
+        visibility: state.pendingVisibility,
+        displayName,
+      });
+      if (ensuredUser?.visibility) {
+        state.pendingVisibility = ensuredUser.visibility;
+      }
     } catch (error) {
       state.pendingDisplayName = null;
+      state.pendingVisibility = null;
       throw error;
     }
   }
 
   async function handleAuthState(user) {
     const pendingDisplayName = state.pendingDisplayName;
+    const pendingVisibility = state.pendingVisibility;
     resetState();
     if (!user) {
-      state.pendingDisplayName = null;
-      ui.loginForm.reset();
+      if (ui.loginForm) {
+        ui.loginForm.reset();
+      }
+      if (ui.visibilityInputs.length) {
+        const privateOption = ui.visibilityInputs.find((input) => input.value === "private");
+        if (privateOption) {
+          privateOption.checked = true;
+        }
+      }
       showView("login");
       return;
     }
@@ -2183,19 +2377,54 @@ function bootstrapApp() {
     const pseudoKey = extractPseudoFromEmail(user.email || "");
     if (!pseudoKey) {
       console.error("Utilisateur connecté avec une adresse e-mail inattendue", user.email);
-      state.pendingDisplayName = null;
       showToast("Profil invalide détecté. Déconnexion en cours.", "error");
       await signOut(auth);
       return;
     }
 
     state.pseudo = pseudoKey;
-    const resolvedDisplayName = user.displayName || pendingDisplayName || pseudoKey;
+
+    let userDocData = null;
+    try {
+      const snapshot = await getDoc(doc(db, "users", pseudoKey));
+      if (snapshot.exists()) {
+        userDocData = snapshot.data() || {};
+      }
+    } catch (error) {
+      console.warn("Impossible de récupérer le profil utilisateur", error);
+    }
+
+    const docDisplayName =
+      typeof userDocData?.displayName === "string" && userDocData.displayName.trim()
+        ? userDocData.displayName.trim()
+        : "";
+    const resolvedDisplayName =
+      user.displayName ||
+      pendingDisplayName ||
+      docDisplayName ||
+      pseudoKey;
     state.displayName = resolvedDisplayName;
     state.pendingDisplayName = null;
-    ui.currentUser.textContent = `Connecté en tant que ${resolvedDisplayName}`;
+
+    const resolvedVisibility = userDocData
+      ? sanitizeVisibility(userDocData.visibility)
+      : sanitizeVisibility(pendingVisibility);
+    state.visibility = resolvedVisibility;
+    state.pendingVisibility = null;
+
+    const visibilityLabel =
+      resolvedVisibility === "public" ? "compte public" : "compte privé";
+    ui.currentUser.textContent = `Connecté en tant que ${resolvedDisplayName} · ${visibilityLabel}`;
     ui.logoutBtn.disabled = false;
-    ui.loginForm.reset();
+    if (ui.loginForm) {
+      ui.loginForm.reset();
+    }
+    if (ui.visibilityInputs.length) {
+      const privateOption = ui.visibilityInputs.find((input) => input.value === "private");
+      if (privateOption) {
+        privateOption.checked = true;
+      }
+    }
     subscribeToNotes();
     showView("workspace");
   }
@@ -2231,6 +2460,9 @@ function bootstrapApp() {
 
   function initEvents() {
     ui.loginForm.addEventListener("submit", handleLoginSubmit);
+    if (ui.publicUsersList) {
+      ui.publicUsersList.addEventListener("click", handlePublicUsersClick);
+    }
     ui.logoutBtn.addEventListener("click", logout);
     ui.addNoteBtn.addEventListener("click", () => {
       createNote().catch((error) => {
@@ -2277,6 +2509,7 @@ function bootstrapApp() {
     });
   }
 
+  subscribeToPublicUsers();
   initEvents();
   initAuth();
 }

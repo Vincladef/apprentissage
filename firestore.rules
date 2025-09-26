@@ -27,6 +27,28 @@ service cloud.firestore {
       return value is timestamp && value == request.time;
     }
 
+    function isVisibility(value) {
+      return value is string && (value == "public" || value == "private");
+    }
+
+    function userHasValidKeys(data) {
+      return data.keys().hasOnly(['createdAt', 'visibility', 'displayName']);
+    }
+
+    function canCreateUser(data) {
+      return userHasValidKeys(data) &&
+             isServerTimestamp(data.createdAt) &&
+             isVisibility(data.visibility) &&
+             optionalString(data.displayName, 120);
+    }
+
+    function canUpdateUserProfile(newData, existingData) {
+      return userHasValidKeys(newData) &&
+             newData.createdAt == existingData.createdAt &&
+             isVisibility(newData.visibility) &&
+             optionalString(newData.displayName, 120);
+    }
+
     function noteHasValidKeys(data) {
       return data.keys().hasOnly(['title', 'contentHtml', 'createdAt', 'updatedAt']);
     }
@@ -48,11 +70,13 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || resource.data.visibility == "public";
 
       allow create: if isOwner(userId) &&
-                    request.resource.data.keys().hasOnly(['createdAt']) &&
-                    isServerTimestamp(request.resource.data.createdAt);
+                    canCreateUser(request.resource.data);
+
+      allow update: if isOwner(userId) &&
+                    canUpdateUserProfile(request.resource.data, resource.data);
 
       allow delete: if isOwner(userId);
 

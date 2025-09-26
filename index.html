@@ -215,8 +215,40 @@
               autocomplete="nickname"
               placeholder="ex.&nbsp;: astrofan"
             />
+            <fieldset class="visibility-options">
+              <legend>Visibilité du compte</legend>
+              <p class="muted small">
+                Choisissez si votre compte est répertorié publiquement sur cette page.
+              </p>
+              <label class="visibility-choice">
+                <input
+                  type="radio"
+                  name="visibility"
+                  value="private"
+                  checked
+                />
+                <span>
+                  <strong>Compte privé</strong>
+                  <span class="muted small">Seul vous pouvez voir vos fiches.</span>
+                </span>
+              </label>
+              <label class="visibility-choice">
+                <input type="radio" name="visibility" value="public" />
+                <span>
+                  <strong>Compte public</strong>
+                  <span class="muted small">Votre pseudo est listé ci-dessous.</span>
+                </span>
+              </label>
+            </fieldset>
             <button type="submit">Commencer</button>
           </form>
+          <section id="public-accounts" class="public-accounts">
+            <h3>Comptes publics disponibles</h3>
+            <p id="public-users-empty" class="muted small">
+              Aucun compte public pour le moment.
+            </p>
+            <div id="public-users-list" class="public-users-list" role="list"></div>
+          </section>
           <p class="muted small">
             Astuce : vous pouvez revenir plus tard avec le même pseudo pour retrouver vos fiches.
           </p>
