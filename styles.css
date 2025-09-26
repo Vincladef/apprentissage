@@ -224,6 +224,45 @@ input[type="text"]:focus {
   position: relative;
 }
 
+#revision-mode-toggle {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(60, 64, 67, 0.08);
+  color: var(--muted);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+#revision-mode-toggle:hover:not(:disabled) {
+  background: rgba(26, 115, 232, 0.12);
+  color: var(--accent-strong);
+}
+
+#revision-mode-toggle[aria-pressed="true"] {
+  background: rgba(26, 115, 232, 0.12);
+  border-color: rgba(26, 115, 232, 0.45);
+  color: var(--accent-strong);
+}
+
+#revision-mode-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#revision-iteration-btn {
+  display: none;
+  font-size: 0.9rem;
+  padding: 0.45rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--accent-strong);
+  color: #fff;
+}
+
+#revision-iteration-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
 .header-menu-toggle {
   width: 1.9rem;
   height: 1.9rem;
@@ -1397,4 +1436,72 @@ body.notes-drawer-open .drawer-overlay {
     min-height: auto;
     height: auto;
   }
+}
+
+body.revision-mode {
+  background: #edf1f5;
+}
+
+body.revision-mode .workspace {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+body.revision-mode .note-list,
+body.revision-mode #workspace-menu-btn,
+body.revision-mode #workspace-menu,
+body.revision-mode #mobile-notes-btn,
+body.revision-mode .note-list-actions,
+body.revision-mode .drawer-overlay {
+  display: none !important;
+}
+
+body.revision-mode .header-actions > *:not(#revision-mode-toggle):not(#revision-iteration-btn) {
+  display: none !important;
+}
+
+body.revision-mode #revision-mode-toggle {
+  background: rgba(26, 115, 232, 0.14);
+  border-color: rgba(26, 115, 232, 0.35);
+  color: var(--accent-strong);
+}
+
+body.revision-mode #revision-iteration-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+body.revision-mode .editor-area {
+  align-items: center;
+  padding-top: 2rem;
+  padding-bottom: 2.5rem;
+}
+
+body.revision-mode .editor-wrapper {
+  max-width: 720px;
+}
+
+body.revision-mode #note-title {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+body.revision-mode #note-title:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+body.revision-mode .editor {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: none;
+  cursor: default;
+}
+
+body.revision-mode .editor:focus {
+  outline: none;
 }
