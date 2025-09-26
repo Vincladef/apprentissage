@@ -72,6 +72,7 @@
       <div class="header-toolbar">
         <div class="editor-toolbar" role="toolbar" aria-label="Outils de mise en forme">
           <div class="toolbar-row toolbar-row--primary" aria-label="Raccourcis de mise en forme">
+            <div data-desktop-formatting-slot></div>
             <div class="toolbar-group" role="group" aria-label="Styles de texte">
               <button type="button" class="toolbar-button" data-command="bold" title="Gras (Ctrl+B)">
                 <span class="icon" aria-hidden="true">B</span>
@@ -153,38 +154,40 @@
             aria-label="Options avancées"
             aria-hidden="true"
           >
-            <div class="toolbar-group toolbar-group--primary">
-              <label class="toolbar-select">
-                <span class="sr-only">Style de texte</span>
-                <select id="block-format" data-command="formatBlock" aria-label="Style de texte">
-                  <option value="p" selected>Normal</option>
-                  <option value="h1">Titre 1</option>
-                  <option value="h2">Titre 2</option>
-                  <option value="h3">Titre 3</option>
-                  <option value="blockquote">Citation</option>
-                </select>
-              </label>
-              <label class="toolbar-select">
-                <span class="sr-only">Police</span>
-                <select id="font-family" data-command="fontName" aria-label="Police">
-                  <option value="Arial" selected>Arial</option>
-                  <option value="Georgia">Georgia</option>
-                  <option value="Inter">Inter</option>
-                  <option value="Times New Roman">Times New Roman</option>
-                  <option value="Trebuchet MS">Trebuchet</option>
-                  <option value="Verdana">Verdana</option>
-                </select>
-              </label>
-              <div class="font-size-control" role="group" aria-label="Taille du texte">
-                <button type="button" class="toolbar-button" data-action="decreaseFontSize" title="Diminuer la taille">
-                  <span aria-hidden="true">−</span>
-                  <span class="sr-only">Diminuer la taille</span>
-                </button>
-                <span id="font-size-value" aria-live="polite">11</span>
-                <button type="button" class="toolbar-button" data-action="increaseFontSize" title="Augmenter la taille">
-                  <span aria-hidden="true">+</span>
-                  <span class="sr-only">Augmenter la taille</span>
-                </button>
+            <div id="toolbar-formatting-controls">
+              <div class="toolbar-group toolbar-group--primary">
+                <label class="toolbar-select">
+                  <span class="sr-only">Style de texte</span>
+                  <select id="block-format" data-command="formatBlock" aria-label="Style de texte">
+                    <option value="p" selected>Normal</option>
+                    <option value="h1">Titre 1</option>
+                    <option value="h2">Titre 2</option>
+                    <option value="h3">Titre 3</option>
+                    <option value="blockquote">Citation</option>
+                  </select>
+                </label>
+                <label class="toolbar-select">
+                  <span class="sr-only">Police</span>
+                  <select id="font-family" data-command="fontName" aria-label="Police">
+                    <option value="Arial" selected>Arial</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Inter">Inter</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Trebuchet MS">Trebuchet</option>
+                    <option value="Verdana">Verdana</option>
+                  </select>
+                </label>
+                <div class="font-size-control" role="group" aria-label="Taille du texte">
+                  <button type="button" class="toolbar-button" data-action="decreaseFontSize" title="Diminuer la taille">
+                    <span aria-hidden="true">−</span>
+                    <span class="sr-only">Diminuer la taille</span>
+                  </button>
+                  <span id="font-size-value" aria-live="polite">11</span>
+                  <button type="button" class="toolbar-button" data-action="increaseFontSize" title="Augmenter la taille">
+                    <span aria-hidden="true">+</span>
+                    <span class="sr-only">Augmenter la taille</span>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="toolbar-group toolbar-group--advanced">
