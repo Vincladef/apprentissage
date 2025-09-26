@@ -1075,6 +1075,15 @@ function bootstrapApp() {
       typeof event.inputType === "string" &&
       event.inputType.startsWith("insert");
 
+    const isPasteInsertion =
+      !state.isRevisionMode &&
+      isInputEvent &&
+      ((typeof event.inputType === "string" && event.inputType === "insertFromPaste") ||
+        (typeof event.data === "string" && event.data.includes("##")));
+
+    const editorHasRawCloze = () =>
+      Boolean(ui.noteEditor && typeof ui.noteEditor.textContent === "string" && ui.noteEditor.textContent.includes("##"));
+
     if (isHashInsertion) {
       rememberEditorSelection();
       const selectionBeforeShortcut = state.savedSelection
@@ -1086,6 +1095,31 @@ function bootstrapApp() {
           ? Boolean(transformedResult.success)
           : Boolean(transformedResult);
       if (!transformed && selectionBeforeShortcut) {
+        focusEditorPreservingSelection(selectionBeforeShortcut);
+      }
+    }
+
+    if (isPasteInsertion && editorHasRawCloze()) {
+      rememberEditorSelection();
+      const selectionBeforeShortcut = state.savedSelection
+        ? { ...state.savedSelection }
+        : null;
+      let transformedAtLeastOnce = false;
+      let attempts = 0;
+      const MAX_TRANSFORMS = 200;
+      while (editorHasRawCloze() && attempts < MAX_TRANSFORMS) {
+        attempts += 1;
+        const transformedResult = runWithPreservedSelection(() => applyClozeShortcut());
+        const success =
+          transformedResult && typeof transformedResult === "object"
+            ? Boolean(transformedResult.success)
+            : Boolean(transformedResult);
+        if (!success) {
+          break;
+        }
+        transformedAtLeastOnce = true;
+      }
+      if (!transformedAtLeastOnce && selectionBeforeShortcut) {
         focusEditorPreservingSelection(selectionBeforeShortcut);
       }
     }
