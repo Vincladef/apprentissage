@@ -1053,7 +1053,14 @@ function bootstrapApp() {
       event.inputType.startsWith("insert");
 
     if (isHashInsertion) {
-      runWithPreservedSelection(() => applyClozeShortcut());
+      rememberEditorSelection();
+      const selectionBeforeShortcut = state.savedSelection
+        ? { ...state.savedSelection }
+        : null;
+      const transformed = runWithPreservedSelection(() => applyClozeShortcut());
+      if (!transformed && selectionBeforeShortcut) {
+        focusEditorPreservingSelection(selectionBeforeShortcut);
+      }
     }
 
     refreshAllClozes();
