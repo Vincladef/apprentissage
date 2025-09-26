@@ -250,22 +250,16 @@ function bootstrapApp() {
   }
   window.addEventListener("orientationchange", updateToolbarOffsets, { passive: true });
 
-  const SCROLL_COLLAPSE_THRESHOLD = 24;
-
-  function updateHeaderCollapseState() {
+  function keepHeaderVisible() {
     if (!bodyElement) {
       return;
     }
 
-    if (window.scrollY > SCROLL_COLLAPSE_THRESHOLD) {
-      bodyElement.classList.add("header-collapsed");
-    } else {
-      bodyElement.classList.remove("header-collapsed");
-    }
+    bodyElement.classList.remove("header-collapsed");
   }
 
-  window.addEventListener("scroll", updateHeaderCollapseState, { passive: true });
-  updateHeaderCollapseState();
+  window.addEventListener("scroll", keepHeaderVisible, { passive: true });
+  keepHeaderVisible();
 
 
   showView(null);
