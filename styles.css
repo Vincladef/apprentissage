@@ -1046,6 +1046,69 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   box-shadow: 0 1px 4px rgba(60, 64, 67, 0.18);
 }
 
+.editor img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.editor .editor-image {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.75rem auto;
+}
+
+.editor .editor-image img {
+  display: block;
+  border-radius: 0.4rem;
+}
+
+.editor .editor-image__handle {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translate(50%, -50%);
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: rgba(26, 115, 232, 0.92);
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 8px rgba(26, 115, 232, 0.35);
+  cursor: ew-resize;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  touch-action: none;
+  user-select: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.editor .editor-image__handle::after {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  border-radius: 0.2rem;
+}
+
+.editor .editor-image__handle:focus-visible,
+.editor .editor-image__handle:hover {
+  background: rgba(26, 115, 232, 1);
+  box-shadow: 0 6px 12px rgba(26, 115, 232, 0.45);
+}
+
+.editor .editor-image__handle:active {
+  transform: translate(50%, -50%) scale(0.94);
+}
+
+.editor .editor-image--resizing .editor-image__handle {
+  background: rgba(26, 115, 232, 1);
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.25);
+}
+
 .editor:focus {
   outline: 3px solid rgba(26, 115, 232, 0.25);
 }
