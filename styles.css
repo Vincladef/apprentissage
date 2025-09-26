@@ -721,6 +721,10 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   flex-wrap: wrap;
 }
 
+.toolbar-row [data-desktop-formatting-slot] {
+  display: none;
+}
+
 .toolbar-row--secondary {
   padding-top: 0.25rem;
   margin-top: 0.15rem;
@@ -819,6 +823,25 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
     flex: 0 1 auto;
   }
 
+  .toolbar-row [data-desktop-formatting-slot] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+  }
+
+  #toolbar-formatting-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+  }
+
+  #toolbar-formatting-controls .toolbar-group--primary {
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+  }
+
   .toolbar-select {
     flex: 0 1 auto;
     padding: 0 0.25rem;
@@ -840,6 +863,14 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
   .font-size-control #font-size-value {
     min-width: 2ch;
+  }
+
+  #toolbar-more-panel {
+    display: none;
+  }
+
+  .editor-toolbar .toolbar-more-toggle {
+    display: none;
   }
 }
 

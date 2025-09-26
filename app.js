@@ -223,6 +223,8 @@ function bootstrapApp() {
     mobileNotesBtn: document.getElementById("mobile-notes-btn"),
     toolbarMoreBtn: document.getElementById("toolbar-more-btn"),
     toolbarMorePanel: document.getElementById("toolbar-more-panel"),
+    toolbarFormattingControls: document.getElementById("toolbar-formatting-controls"),
+    desktopFormattingSlot: document.querySelector("[data-desktop-formatting-slot]"),
     revisionModeToggle: document.getElementById("revision-mode-toggle"),
     revisionIterationBtn: document.getElementById("revision-iteration-btn"),
   };
@@ -244,6 +246,11 @@ function bootstrapApp() {
   const headerElement = document.querySelector(".app-header");
   const visualViewport = window.visualViewport ?? null;
   const mobileMediaQuery = window.matchMedia("(max-width: 900px)");
+  const toolbarFormattingHome = {
+    parent: ui.toolbarMorePanel ?? null,
+    before:
+      ui.toolbarMorePanel?.querySelector(".toolbar-group--advanced") ?? null
+  };
 
   const KEYBOARD_VISIBLE_CLASS = "keyboard-visible";
   const KEYBOARD_HEIGHT_THRESHOLD = 120;
@@ -632,17 +639,17 @@ function bootstrapApp() {
 
   function setToolbarMoreMenu(open) {
     if (!ui.toolbarMoreBtn || !ui.toolbarMorePanel) return;
+    if (!mobileMediaQuery.matches) {
+      ui.toolbarMorePanel.classList.remove("is-open");
+      ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
+      ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
+      document.removeEventListener("click", handleToolbarOutsideClick);
+      return;
+    }
     const shouldOpen = Boolean(open);
     const isOpen = ui.toolbarMorePanel.classList.contains("is-open");
 
     if (shouldOpen) {
-      if (!mobileMediaQuery.matches) {
-        ui.toolbarMorePanel.classList.remove("is-open");
-        ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
-        ui.toolbarMorePanel.removeAttribute("aria-hidden");
-        document.removeEventListener("click", handleToolbarOutsideClick);
-        return;
-      }
       if (!isOpen) {
         ui.toolbarMorePanel.classList.add("is-open");
       }
@@ -653,11 +660,7 @@ function bootstrapApp() {
       if (isOpen) {
         ui.toolbarMorePanel.classList.remove("is-open");
       }
-      if (mobileMediaQuery.matches) {
-        ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
-      } else {
-        ui.toolbarMorePanel.removeAttribute("aria-hidden");
-      }
+      ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
       ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
       document.removeEventListener("click", handleToolbarOutsideClick);
     }
@@ -672,6 +675,57 @@ function bootstrapApp() {
       return;
     }
     setToolbarMoreMenu(false);
+  }
+
+  function updateToolbarFormattingLayout() {
+    if (!ui.toolbarFormattingControls) {
+      return;
+    }
+
+    const isMobileLayout = mobileMediaQuery.matches;
+
+    if (!isMobileLayout) {
+      if (
+        ui.desktopFormattingSlot &&
+        !ui.desktopFormattingSlot.contains(ui.toolbarFormattingControls)
+      ) {
+        ui.desktopFormattingSlot.appendChild(ui.toolbarFormattingControls);
+      }
+      if (ui.toolbarMoreBtn) {
+        ui.toolbarMoreBtn.setAttribute("hidden", "");
+        ui.toolbarMoreBtn.setAttribute("aria-hidden", "true");
+        ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
+      }
+      setToolbarMoreMenu(false);
+      if (ui.toolbarMorePanel) {
+        ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
+      }
+      return;
+    }
+
+    if (
+      toolbarFormattingHome.parent &&
+      toolbarFormattingHome.parent !== ui.toolbarFormattingControls.parentElement
+    ) {
+      const referenceNode =
+        toolbarFormattingHome.before &&
+        toolbarFormattingHome.before.parentNode === toolbarFormattingHome.parent
+          ? toolbarFormattingHome.before
+          : null;
+      toolbarFormattingHome.parent.insertBefore(
+        ui.toolbarFormattingControls,
+        referenceNode
+      );
+    }
+    if (ui.toolbarMoreBtn) {
+      ui.toolbarMoreBtn.removeAttribute("hidden");
+      ui.toolbarMoreBtn.removeAttribute("aria-hidden");
+      ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
+    }
+    if (ui.toolbarMorePanel) {
+      ui.toolbarMorePanel.classList.remove("is-open");
+      ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
+    }
   }
 
   function isPermissionDenied(error) {
@@ -2545,5 +2599,11 @@ function bootstrapApp() {
 
   subscribeToPublicUsers();
   initEvents();
+  updateToolbarFormattingLayout();
+  if (typeof mobileMediaQuery.addEventListener === "function") {
+    mobileMediaQuery.addEventListener("change", updateToolbarFormattingLayout);
+  } else if (typeof mobileMediaQuery.addListener === "function") {
+    mobileMediaQuery.addListener(updateToolbarFormattingLayout);
+  }
   initAuth();
 }
