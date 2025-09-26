@@ -1135,6 +1135,40 @@ function bootstrapApp() {
 
     range.setStart(startNode, Math.max(0, startOffset));
     range.setEnd(endNode, Math.max(0, endOffset));
+
+    const isCollapsedSelection =
+      typeof saved.start === "number" &&
+      typeof saved.end === "number" &&
+      saved.start === saved.end &&
+      range.collapsed;
+
+    if (isCollapsedSelection) {
+      const referenceNode =
+        range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : range.startContainer;
+      const clozeElement =
+        referenceNode && referenceNode.closest
+          ? referenceNode.closest(".cloze")
+          : null;
+
+      if (clozeElement) {
+        const clozeEndRange = document.createRange();
+        clozeEndRange.selectNodeContents(clozeElement);
+        clozeEndRange.collapse(false);
+
+        const atClozeEnd =
+          range.compareBoundaryPoints(Range.START_TO_START, clozeEndRange) === 0 &&
+          range.compareBoundaryPoints(Range.END_TO_END, clozeEndRange) === 0;
+
+        if (atClozeEnd) {
+          range.setStartAfter(clozeElement);
+          range.setEndAfter(clozeElement);
+          range.collapse(true);
+        }
+      }
+    }
+
     selection.removeAllRanges();
     selection.addRange(range);
   }
