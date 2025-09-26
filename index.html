@@ -267,11 +267,17 @@
                 <p class="muted small">Tout est enregistré automatiquement.</p>
               </div>
               <div class="note-list-actions">
-                <button id="add-note-btn" type="button">Nouvelle fiche</button>
+                <button id="add-note-btn" type="button" aria-label="Nouvelle fiche">
+                  Nouvelle fiche
+                </button>
               </div>
             </div>
             <div id="notes-container" class="notes-container"></div>
           </aside>
+
+          <button id="mobile-add-note-btn" type="button" aria-label="Nouvelle fiche">
+            Nouvelle fiche
+          </button>
 
           <section class="editor-area">
             <div id="empty-note" class="empty-state">
