@@ -173,6 +173,7 @@ function bootstrapApp() {
     activeCloze: null,
     pendingRemoteNote: null,
     isEditorFocused: false,
+    isRevisionMode: false,
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
   };
@@ -214,6 +215,8 @@ function bootstrapApp() {
     mobileNotesBtn: document.getElementById("mobile-notes-btn"),
     toolbarMoreBtn: document.getElementById("toolbar-more-btn"),
     toolbarMorePanel: document.getElementById("toolbar-more-panel"),
+    revisionModeToggle: document.getElementById("revision-mode-toggle"),
+    revisionIterationBtn: document.getElementById("revision-iteration-btn"),
   };
 
   const workspaceLayout = document.querySelector(".workspace");
@@ -313,6 +316,75 @@ function bootstrapApp() {
     bodyElement.classList.remove("header-collapsed");
   }
 
+  function setRevisionMode(enabled) {
+    const hasNote = Boolean(state.currentNote);
+    const shouldEnable = Boolean(enabled && hasNote);
+    if (enabled && !hasNote) {
+      showToast("Ouvrez une fiche pour activer le mode révision.", "info");
+    }
+    state.isRevisionMode = shouldEnable;
+
+    if (bodyElement) {
+      bodyElement.classList.toggle("revision-mode", shouldEnable);
+    }
+
+    if (ui.revisionModeToggle) {
+      ui.revisionModeToggle.setAttribute("aria-pressed", String(shouldEnable));
+      ui.revisionModeToggle.setAttribute(
+        "aria-label",
+        shouldEnable ? "Désactiver le mode révision" : "Activer le mode révision"
+      );
+      ui.revisionModeToggle.disabled = !hasNote;
+    }
+
+    if (ui.revisionIterationBtn) {
+      ui.revisionIterationBtn.disabled = !shouldEnable;
+    }
+
+    if (headerElement) {
+      headerElement.classList.toggle("toolbar-hidden", shouldEnable || !hasNote);
+    }
+
+    if (shouldEnable) {
+      closeHeaderMenu();
+      setNotesDrawer(false);
+      setSidebarCollapsed(false);
+      hideClozeFeedback();
+    }
+
+    if (ui.noteEditor) {
+      const isEditable = hasNote && !shouldEnable;
+      ui.noteEditor.setAttribute("contenteditable", isEditable ? "true" : "false");
+      if (!isEditable) {
+        ui.noteEditor.setAttribute("aria-disabled", "true");
+        ui.noteEditor.blur();
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+        }
+        state.savedSelection = null;
+      } else {
+        ui.noteEditor.removeAttribute("aria-disabled");
+      }
+    }
+
+    if (ui.noteTitle) {
+      ui.noteTitle.readOnly = shouldEnable || !hasNote;
+      if (shouldEnable) {
+        ui.noteTitle.blur();
+      }
+    }
+
+    if (shouldEnable) {
+      state.isEditorFocused = false;
+    }
+
+    setToolbarMoreMenu(false);
+    updateKeyboardVisibility();
+    updateToolbarOffsets();
+    return state.isRevisionMode;
+  }
+
   function handleEditorFocus() {
     state.isEditorFocused = true;
     if (visualViewport) {
@@ -340,6 +412,8 @@ function bootstrapApp() {
 
   window.addEventListener("scroll", keepHeaderVisible, { passive: true });
   keepHeaderVisible();
+
+  setRevisionMode(false);
 
 
   showView(null);
@@ -697,6 +771,7 @@ function bootstrapApp() {
   }
 
   function showEmptyEditor() {
+    setRevisionMode(false);
     hideClozeFeedback();
     ui.editorWrapper.classList.add("hidden");
     ui.emptyState.classList.remove("hidden");
@@ -707,10 +782,6 @@ function bootstrapApp() {
     state.isEditorFocused = false;
     state.savedSelection = null;
     state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
-    if (headerElement) {
-      headerElement.classList.add("toolbar-hidden");
-    }
-    setToolbarMoreMenu(false);
     if (ui.blockFormat) {
       ui.blockFormat.value = "p";
     }
@@ -730,9 +801,6 @@ function bootstrapApp() {
     hideClozeFeedback();
     ui.emptyState.classList.add("hidden");
     ui.editorWrapper.classList.remove("hidden");
-    if (headerElement) {
-      headerElement.classList.remove("toolbar-hidden");
-    }
     const desiredTitle = state.currentNote.title || "";
     if (force || ui.noteTitle.value !== desiredTitle) {
       ui.noteTitle.value = desiredTitle;
@@ -761,7 +829,12 @@ function bootstrapApp() {
       updateSaveStatus(state.lastSavedAt ? "saved" : "", state.lastSavedAt || null);
     }
     updateFontSizeDisplay();
-    rememberEditorSelection();
+    setRevisionMode(state.isRevisionMode);
+    if (!state.isRevisionMode) {
+      rememberEditorSelection();
+    } else {
+      state.savedSelection = null;
+    }
   }
 
   function queueRemoteNoteUpdate(note) {
@@ -914,7 +987,9 @@ function bootstrapApp() {
     state.hasUnsavedChanges = false;
     applyCurrentNoteToEditor({ force: true });
     updateActiveNoteHighlight();
-    setTimeout(() => ui.noteTitle.focus(), 80);
+    if (!state.isRevisionMode) {
+      setTimeout(() => ui.noteTitle.focus(), 80);
+    }
   }
 
   async function selectNoteById(noteId) {
@@ -932,7 +1007,7 @@ function bootstrapApp() {
   }
 
   function handleTitleInput(event) {
-    if (!state.currentNote) return;
+    if (!state.currentNote || state.isRevisionMode) return;
     state.currentNote.title = event.target.value;
     state.hasUnsavedChanges = true;
     state.pendingRemoteNote = null;
@@ -951,15 +1026,21 @@ function bootstrapApp() {
     scheduleSave();
   }
 
-  function handleEditorInput() {
+  function handleEditorInput(options = {}) {
     if (!state.currentNote) return;
+    const { bypassReadOnly = false } = options;
+    if (state.isRevisionMode && !bypassReadOnly) {
+      return;
+    }
     refreshAllClozes();
     state.currentNote.contentHtml = ui.noteEditor.innerHTML;
     state.hasUnsavedChanges = true;
     state.pendingRemoteNote = null;
     updateSaveStatus("dirty");
     scheduleSave();
-    rememberEditorSelection();
+    if (!state.isRevisionMode) {
+      rememberEditorSelection();
+    }
   }
 
   function captureSelection(container) {
@@ -1338,7 +1419,7 @@ function bootstrapApp() {
     refreshAllClozes();
 
     if (changed) {
-      handleEditorInput();
+      handleEditorInput({ bypassReadOnly: true });
       const messages = [];
       if (reactivatedCount > 0) {
         const plural = reactivatedCount > 1 ? "s" : "";
@@ -1500,7 +1581,7 @@ function bootstrapApp() {
     }
     const appliedPoints = setClozePoints(cloze, newPoints);
     refreshClozeElement(cloze);
-    handleEditorInput();
+    handleEditorInput({ bypassReadOnly: true });
     hideClozeFeedback();
 
     const label = feedback.label || button.textContent.trim();
@@ -1529,6 +1610,10 @@ function bootstrapApp() {
   function handleToolbarChange(event) {
     const select = closestElement(event.target, "select[data-command]");
     if (!select || !state.currentNote) return;
+    if (state.isRevisionMode) {
+      event.preventDefault();
+      return;
+    }
     let value = select.value;
     const command = select.dataset.command;
     if (command === "formatBlock" && value && !value.startsWith("<")) {
@@ -1545,6 +1630,15 @@ function bootstrapApp() {
     if (!button || !state.currentNote) return;
     const command = button.dataset.command;
     const action = button.dataset.action;
+    if (state.isRevisionMode) {
+      if (action === "startIteration") {
+        event.preventDefault();
+        startNewIteration();
+        return;
+      }
+      event.preventDefault();
+      return;
+    }
     let handledBySelectionHelper = false;
     if (command) {
       let value = button.dataset.value || null;
@@ -1855,6 +1949,18 @@ function bootstrapApp() {
     }
     if (ui.clozeFeedback) {
       ui.clozeFeedback.addEventListener("click", handleClozeFeedbackClick);
+    }
+    if (ui.revisionModeToggle) {
+      ui.revisionModeToggle.addEventListener("click", () => {
+        setRevisionMode(!state.isRevisionMode);
+      });
+    }
+    if (ui.revisionIterationBtn) {
+      ui.revisionIterationBtn.addEventListener("click", () => {
+        if (state.isRevisionMode) {
+          startNewIteration();
+        }
+      });
     }
     document.addEventListener("click", handleDocumentClick);
     document.addEventListener("selectionchange", handleSelectionChange);
