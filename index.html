@@ -14,38 +14,147 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="app-header">
-      <div class="brand">
-        <button
-          type="button"
-          id="mobile-notes-btn"
-          class="header-icon-button"
-          aria-label="Afficher les fiches"
-          aria-pressed="false"
-          aria-expanded="true"
-        >
-          ☰
-          <span class="sr-only">Afficher les fiches</span>
-        </button>
-        <div class="brand-text">
-          <h1>Apprentissage actif</h1>
-          <p class="subtitle">Des fiches simples, prêtes à apprendre.</p>
+    <header class="app-header toolbar-hidden">
+      <div class="header-top">
+        <div class="brand">
+          <button
+            type="button"
+            id="mobile-notes-btn"
+            class="header-icon-button"
+            aria-label="Afficher les fiches"
+            aria-pressed="false"
+            aria-expanded="true"
+          >
+            ☰
+            <span class="sr-only">Afficher les fiches</span>
+          </button>
+          <div class="brand-text">
+            <h1>Apprentissage actif</h1>
+            <p class="subtitle">Des fiches simples, prêtes à apprendre.</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span id="current-user" class="muted"></span>
+          <button
+            type="button"
+            id="workspace-menu-btn"
+            class="header-menu-toggle"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-label="Ouvrir le menu principal"
+          >
+            ⋮
+          </button>
+          <div id="workspace-menu" class="header-menu" role="menu">
+            <button id="logout-btn" class="menu-item" role="menuitem">Se déconnecter</button>
+          </div>
         </div>
       </div>
-      <div class="header-actions">
-        <span id="current-user" class="muted"></span>
-        <button
-          type="button"
-          id="workspace-menu-btn"
-          class="header-menu-toggle"
-          aria-haspopup="true"
-          aria-expanded="false"
-          aria-label="Ouvrir le menu principal"
-        >
-          ⋮
-        </button>
-        <div id="workspace-menu" class="header-menu" role="menu">
-          <button id="logout-btn" class="menu-item" role="menuitem">Se déconnecter</button>
+      <div class="header-toolbar">
+        <div class="editor-toolbar" role="toolbar" aria-label="Outils de mise en forme">
+          <div class="toolbar-row toolbar-row--primary" aria-label="Raccourcis de mise en forme">
+            <div class="toolbar-group" role="group" aria-label="Styles de texte">
+              <button type="button" class="toolbar-button" data-command="bold" title="Gras (Ctrl+B)">
+                <span class="icon" aria-hidden="true">B</span>
+                <span class="sr-only">Gras</span>
+              </button>
+              <button type="button" class="toolbar-button" data-command="italic" title="Italique (Ctrl+I)">
+                <span class="icon" aria-hidden="true">I</span>
+                <span class="sr-only">Italique</span>
+              </button>
+              <button type="button" class="toolbar-button" data-command="underline" title="Souligné (Ctrl+U)">
+                <span class="icon" aria-hidden="true">U</span>
+                <span class="sr-only">Souligner</span>
+              </button>
+            </div>
+            <div class="toolbar-group" role="group" aria-label="Listes">
+              <button type="button" class="toolbar-button" data-command="insertUnorderedList" title="Liste à puces">
+                <span class="icon" aria-hidden="true">•</span>
+                <span class="sr-only">Liste à puces</span>
+              </button>
+              <button type="button" class="toolbar-button" data-command="insertOrderedList" title="Liste numérotée">
+                <span class="icon" aria-hidden="true">1.</span>
+                <span class="sr-only">Liste numérotée</span>
+              </button>
+            </div>
+            <div class="toolbar-group toolbar-group--colors" role="group" aria-label="Couleurs">
+              <button
+                type="button"
+                class="toolbar-button color-tool"
+                data-action="applyTextColor"
+                data-value="#1f2937"
+                title="Couleur du texte"
+              >
+                <span class="icon" aria-hidden="true">A</span>
+                <span class="color-bar" aria-hidden="true"></span>
+                <span class="sr-only">Appliquer la couleur du texte</span>
+              </button>
+              <button type="button" class="toolbar-button color-tool" data-action="applyHighlight" title="Surligner">
+                <span class="icon" aria-hidden="true">🖍</span>
+                <span class="color-bar highlight" aria-hidden="true"></span>
+                <span class="sr-only">Surligner la sélection</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              id="toolbar-more-btn"
+              class="toolbar-button toolbar-more-toggle"
+              aria-expanded="false"
+              aria-controls="toolbar-more-panel"
+              title="Afficher plus d'options"
+            >
+              ⋯
+              <span class="sr-only">Afficher plus d'options</span>
+            </button>
+          </div>
+          <div
+            class="toolbar-row toolbar-row--secondary"
+            id="toolbar-more-panel"
+            role="group"
+            aria-label="Options avancées"
+            aria-hidden="true"
+          >
+            <div class="toolbar-group toolbar-group--primary">
+              <label class="toolbar-select">
+                <span class="sr-only">Style de texte</span>
+                <select id="block-format" data-command="formatBlock" aria-label="Style de texte">
+                  <option value="p" selected>Normal</option>
+                  <option value="h1">Titre 1</option>
+                  <option value="h2">Titre 2</option>
+                  <option value="h3">Titre 3</option>
+                  <option value="blockquote">Citation</option>
+                </select>
+              </label>
+              <label class="toolbar-select">
+                <span class="sr-only">Police</span>
+                <select id="font-family" data-command="fontName" aria-label="Police">
+                  <option value="Arial" selected>Arial</option>
+                  <option value="Georgia">Georgia</option>
+                  <option value="Inter">Inter</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Trebuchet MS">Trebuchet</option>
+                  <option value="Verdana">Verdana</option>
+                </select>
+              </label>
+              <div class="font-size-control" role="group" aria-label="Taille du texte">
+                <button type="button" class="toolbar-button" data-action="decreaseFontSize" title="Diminuer la taille">
+                  <span aria-hidden="true">−</span>
+                  <span class="sr-only">Diminuer la taille</span>
+                </button>
+                <span id="font-size-value" aria-live="polite">11</span>
+                <button type="button" class="toolbar-button" data-action="increaseFontSize" title="Augmenter la taille">
+                  <span aria-hidden="true">+</span>
+                  <span class="sr-only">Augmenter la taille</span>
+                </button>
+              </div>
+            </div>
+            <div class="toolbar-group toolbar-group--advanced">
+              <button type="button" class="toolbar-button" data-command="removeFormat" title="Effacer la mise en forme">
+                <span class="icon" aria-hidden="true">⨯</span>
+                <span class="sr-only">Effacer la mise en forme</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </header>

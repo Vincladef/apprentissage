@@ -633,6 +633,10 @@ function bootstrapApp() {
     state.isEditorFocused = false;
     state.savedSelection = null;
     state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
+    if (headerElement) {
+      headerElement.classList.add("toolbar-hidden");
+    }
+    setToolbarMoreMenu(false);
     if (ui.blockFormat) {
       ui.blockFormat.value = "p";
     }
@@ -652,6 +656,9 @@ function bootstrapApp() {
     hideClozeFeedback();
     ui.emptyState.classList.add("hidden");
     ui.editorWrapper.classList.remove("hidden");
+    if (headerElement) {
+      headerElement.classList.remove("toolbar-hidden");
+    }
     const desiredTitle = state.currentNote.title || "";
     if (force || ui.noteTitle.value !== desiredTitle) {
       ui.noteTitle.value = desiredTitle;
