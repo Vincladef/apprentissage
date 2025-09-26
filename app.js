@@ -165,6 +165,8 @@ function bootstrapApp() {
     pendingVisibility: null,
     notesUnsubscribe: null,
     notes: [],
+    notesById: new Map(),
+    collapsedNoteIds: new Set(),
     currentNoteId: null,
     currentNote: null,
     pendingSelectionId: null,
@@ -915,11 +917,12 @@ function bootstrapApp() {
   }
 
   function queueRemoteNoteUpdate(note) {
-    if (!note || note.id !== state.currentNoteId) {
+    const sanitized = sanitizeNoteForEditing(note);
+    if (!sanitized || sanitized.id !== state.currentNoteId) {
       state.pendingRemoteNote = null;
       return;
     }
-    state.pendingRemoteNote = { ...note };
+    state.pendingRemoteNote = sanitized;
   }
 
   function applyPendingRemoteNote() {
@@ -927,7 +930,7 @@ function bootstrapApp() {
       state.pendingRemoteNote = null;
       return;
     }
-    state.currentNote = { ...state.pendingRemoteNote };
+    state.currentNote = sanitizeNoteForEditing(state.pendingRemoteNote);
     state.pendingRemoteNote = null;
     state.hasUnsavedChanges = false;
     applyCurrentNoteToEditor();
@@ -937,13 +940,68 @@ function bootstrapApp() {
     const items = ui.notesContainer.querySelectorAll(".note-card");
     items.forEach((item) => {
       const noteId = item.dataset.noteId;
-      item.classList.toggle("active", noteId === state.currentNoteId);
+      const isActive = noteId === state.currentNoteId;
+      item.classList.toggle("active", isActive);
+      if (isActive) {
+        item.setAttribute("aria-current", "true");
+        item.setAttribute("aria-selected", "true");
+      } else {
+        item.removeAttribute("aria-current");
+        item.setAttribute("aria-selected", "false");
+      }
     });
+  }
+
+  function buildNoteTree(flatNotes) {
+    const byId = new Map();
+    flatNotes.forEach((raw) => {
+      byId.set(raw.id, { ...raw, children: [] });
+    });
+
+    const roots = [];
+    byId.forEach((note) => {
+      const parentId = typeof note.parentId === "string" && note.parentId.trim() !== "" ? note.parentId : null;
+      if (parentId && byId.has(parentId)) {
+        byId.get(parentId).children.push(note);
+      } else {
+        roots.push(note);
+      }
+    });
+
+    const sortChildren = (collection) => {
+      collection.sort((a, b) => {
+        const posA = Number.isFinite(a.position) ? a.position : 0;
+        const posB = Number.isFinite(b.position) ? b.position : 0;
+        if (posA !== posB) {
+          return posA - posB;
+        }
+        const updatedA = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+        const updatedB = b.updatedAt instanceof Date ? b.updatedAt.getTime() : 0;
+        if (updatedA !== updatedB) {
+          return updatedB - updatedA;
+        }
+        return (a.title || "").localeCompare(b.title || "");
+      });
+      collection.forEach((child) => sortChildren(child.children));
+    };
+
+    sortChildren(roots);
+
+    return { roots, byId };
+  }
+
+  function getNoteFromState(noteId) {
+    if (!noteId || !(state.notesById instanceof Map)) {
+      return null;
+    }
+    return state.notesById.get(noteId) || null;
   }
 
   function renderNotes() {
     ui.notesContainer.innerHTML = "";
+
     if (!state.notes.length) {
+      ui.notesContainer.removeAttribute("role");
       const empty = document.createElement("p");
       empty.className = "muted small";
       empty.textContent = "Aucune fiche pour le moment. Ajoutez-en une pour commencer.";
@@ -951,72 +1009,256 @@ function bootstrapApp() {
       return;
     }
 
+    ui.notesContainer.setAttribute("role", "tree");
+
+    const fragment = document.createDocumentFragment();
     state.notes.forEach((note) => {
-      const row = document.createElement("div");
-      row.className = "note-row";
-
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "note-card";
-      card.dataset.noteId = note.id;
-      card.addEventListener("click", () => {
-        selectNoteById(note.id).catch((error) => {
-          console.error("Impossible d'ouvrir la fiche", error);
-          showToast("Impossible d'ouvrir la fiche", "error");
-        });
-      });
-
-      const title = document.createElement("span");
-      title.className = "note-card-title";
-      title.textContent = note.title && note.title.trim() ? note.title.trim() : "Sans titre";
-      card.appendChild(title);
-
-      const meta = document.createElement("span");
-      meta.className = "note-card-meta";
-      meta.textContent = formatRelativeDate(note.updatedAt);
-      card.appendChild(meta);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "icon-button";
-      deleteBtn.title = "Supprimer la fiche";
-      deleteBtn.textContent = "✕";
-      deleteBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        deleteNote(note.id).catch((error) => {
-          console.error("Impossible de supprimer la fiche", error);
-          showToast("Impossible de supprimer la fiche", "error");
-        });
-      });
-
-      row.appendChild(card);
-      row.appendChild(deleteBtn);
-      ui.notesContainer.appendChild(row);
+      fragment.appendChild(renderNoteNode(note, 1));
     });
+    ui.notesContainer.appendChild(fragment);
 
     updateActiveNoteHighlight();
   }
 
+  function renderNoteNode(note, level) {
+    const resolveTitle = () =>
+      note.title && note.title.trim() ? note.title.trim() : "Sans titre";
+    const titleText = resolveTitle();
+    const hasChildren = Array.isArray(note.children) && note.children.length > 0;
+    const isCollapsed = hasChildren && state.collapsedNoteIds.has(note.id);
+
+    const node = document.createElement("div");
+    node.className = "note-node";
+    node.dataset.noteId = note.id;
+
+    const row = document.createElement("div");
+    row.className = "note-row";
+    row.style.setProperty("--note-depth", String(Math.max(level - 1, 0)));
+
+    let toggleButton = null;
+    let childrenContainer = null;
+
+    if (hasChildren) {
+      toggleButton = document.createElement("button");
+      toggleButton.type = "button";
+      toggleButton.className = "note-toggle";
+      toggleButton.dataset.noteId = note.id;
+      toggleButton.setAttribute(
+        "aria-label",
+        `${isCollapsed ? "Développer" : "Réduire"} la fiche ${resolveTitle()}`
+      );
+      toggleButton.textContent = isCollapsed ? "▸" : "▾";
+      toggleButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const shouldCollapse = !state.collapsedNoteIds.has(note.id);
+        if (shouldCollapse) {
+          state.collapsedNoteIds.add(note.id);
+        } else {
+          state.collapsedNoteIds.delete(note.id);
+        }
+        updateToggleState(toggleButton, noteCard, childrenContainer);
+      });
+      row.appendChild(toggleButton);
+    } else {
+      const spacer = document.createElement("span");
+      spacer.className = "note-toggle-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      row.appendChild(spacer);
+    }
+
+    const noteCard = document.createElement("button");
+    noteCard.type = "button";
+    noteCard.className = "note-card";
+    noteCard.dataset.noteId = note.id;
+    noteCard.setAttribute("role", "treeitem");
+    noteCard.setAttribute("aria-level", String(level));
+    if (hasChildren) {
+      noteCard.setAttribute("aria-expanded", String(!isCollapsed));
+    }
+    noteCard.addEventListener("click", () => {
+      selectNoteById(note.id).catch((error) => {
+        console.error("Impossible d'ouvrir la fiche", error);
+        showToast("Impossible d'ouvrir la fiche", "error");
+      });
+    });
+    noteCard.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight") {
+        if (hasChildren && state.collapsedNoteIds.has(note.id)) {
+          event.preventDefault();
+          state.collapsedNoteIds.delete(note.id);
+          updateToggleState(toggleButton, noteCard, childrenContainer);
+        } else if (hasChildren && !state.collapsedNoteIds.has(note.id)) {
+          const firstChildButton = childrenContainer?.querySelector(
+            ".note-card"
+          );
+          if (firstChildButton) {
+            event.preventDefault();
+            firstChildButton.focus();
+          }
+        }
+      } else if (event.key === "ArrowLeft") {
+        if (hasChildren && !state.collapsedNoteIds.has(note.id)) {
+          event.preventDefault();
+          state.collapsedNoteIds.add(note.id);
+          updateToggleState(toggleButton, noteCard, childrenContainer);
+        } else if (note.parentId) {
+          const parentButton = ui.notesContainer.querySelector(
+            `.note-card[data-note-id="${note.parentId}"]`
+          );
+          if (parentButton) {
+            event.preventDefault();
+            parentButton.focus();
+          }
+        }
+      }
+    });
+
+    const title = document.createElement("span");
+    title.className = "note-card-title";
+    title.textContent = titleText;
+    noteCard.appendChild(title);
+
+    const meta = document.createElement("span");
+    meta.className = "note-card-meta";
+    meta.textContent = formatRelativeDate(note.updatedAt);
+    noteCard.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "note-row-actions";
+
+    const addChildBtn = document.createElement("button");
+    addChildBtn.type = "button";
+    addChildBtn.className = "icon-button note-add-child";
+    addChildBtn.title = "Créer une sous-fiche";
+    addChildBtn.setAttribute("aria-label", `Créer une sous-fiche dans \"${resolveTitle()}\"`);
+    addChildBtn.textContent = "+";
+    addChildBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      createNote(note.id).catch((error) => {
+        console.error("Impossible de créer la fiche", error);
+        showToast("Impossible de créer la fiche", "error");
+      });
+    });
+    actions.appendChild(addChildBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "icon-button note-delete";
+    deleteBtn.title = "Supprimer la fiche";
+    deleteBtn.setAttribute("aria-label", `Supprimer la fiche \"${resolveTitle()}\"`);
+    deleteBtn.textContent = "✕";
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteNote(note.id).catch((error) => {
+        console.error("Impossible de supprimer la fiche", error);
+        showToast("Impossible de supprimer la fiche", "error");
+      });
+    });
+    actions.appendChild(deleteBtn);
+
+    row.appendChild(noteCard);
+    row.appendChild(actions);
+    node.appendChild(row);
+
+    if (hasChildren) {
+      childrenContainer = document.createElement("div");
+      childrenContainer.className = "note-children";
+      childrenContainer.id = `note-children-${note.id}`;
+      childrenContainer.setAttribute("role", "group");
+      if (isCollapsed) {
+        childrenContainer.hidden = true;
+      }
+      note.children.forEach((child) => {
+        childrenContainer.appendChild(renderNoteNode(child, level + 1));
+      });
+      node.appendChild(childrenContainer);
+      toggleButton.setAttribute("aria-controls", childrenContainer.id);
+      toggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+    }
+
+    function updateToggleState(toggleEl, noteEl, childrenEl) {
+      const currentTitle = resolveTitle();
+      const collapsed = state.collapsedNoteIds.has(note.id);
+      if (toggleEl) {
+        toggleEl.textContent = collapsed ? "▸" : "▾";
+        toggleEl.setAttribute(
+          "aria-label",
+          `${collapsed ? "Développer" : "Réduire"} la fiche ${currentTitle}`
+        );
+        toggleEl.setAttribute("aria-expanded", String(!collapsed));
+      }
+      if (noteEl) {
+        if (Array.isArray(note.children) && note.children.length > 0) {
+          noteEl.setAttribute("aria-expanded", String(!collapsed));
+        } else {
+          noteEl.removeAttribute("aria-expanded");
+        }
+      }
+      if (childrenEl) {
+        childrenEl.hidden = collapsed;
+      }
+    }
+
+    updateToggleState(toggleButton, noteCard, childrenContainer);
+
+    return node;
+  }
+
   function updateNotesFromSnapshot(snapshot) {
-    state.notes = snapshot.docs.map((docSnap) => {
+    const flatNotes = snapshot.docs.map((docSnap) => {
       const data = docSnap.data() || {};
       const toDate = (value) => (value && typeof value.toDate === "function" ? value.toDate() : null);
+      const rawPosition = data.position;
+      let position = 0;
+      if (typeof rawPosition === "number" && Number.isFinite(rawPosition)) {
+        position = rawPosition;
+      } else if (typeof rawPosition === "string") {
+        const parsed = Number.parseFloat(rawPosition);
+        if (Number.isFinite(parsed)) {
+          position = parsed;
+        }
+      }
       return {
         id: docSnap.id,
         title: data.title || "",
         contentHtml: data.contentHtml || "",
         createdAt: toDate(data.createdAt),
-        updatedAt: toDate(data.updatedAt)
+        updatedAt: toDate(data.updatedAt),
+        parentId:
+          typeof data.parentId === "string" && data.parentId.trim() !== ""
+            ? data.parentId.trim()
+            : null,
+        position,
       };
     });
+
+    const { roots, byId } = buildNoteTree(flatNotes);
+    const nextCollapsed = new Set();
+    if (state.collapsedNoteIds instanceof Set) {
+      state.collapsedNoteIds.forEach((noteId) => {
+        const candidate = byId.get(noteId);
+        if (candidate && Array.isArray(candidate.children) && candidate.children.length) {
+          nextCollapsed.add(noteId);
+        }
+      });
+    }
+    state.collapsedNoteIds = nextCollapsed;
+    state.notes = roots;
+    state.notesById = byId;
 
     renderNotes();
     ensureCurrentSelection();
   }
 
+  function sanitizeNoteForEditing(note) {
+    if (!note) return null;
+    const { children, ...rest } = note;
+    return { ...rest };
+  }
+
   function ensureCurrentSelection() {
     if (state.pendingSelectionId) {
-      const pending = state.notes.find((note) => note.id === state.pendingSelectionId);
+      const pending = getNoteFromState(state.pendingSelectionId);
       if (pending) {
         state.pendingSelectionId = null;
         openNote(pending, { skipFlush: true });
@@ -1025,14 +1267,14 @@ function bootstrapApp() {
     }
 
     if (state.currentNoteId) {
-      const current = state.notes.find((note) => note.id === state.currentNoteId);
+      const current = getNoteFromState(state.currentNoteId);
       if (current) {
         if (state.hasUnsavedChanges && state.currentNote) {
           updateSaveStatus("dirty");
         } else if (state.isEditorFocused) {
-          queueRemoteNoteUpdate(current);
+          queueRemoteNoteUpdate(sanitizeNoteForEditing(current));
         } else {
-          state.currentNote = { ...current };
+          state.currentNote = sanitizeNoteForEditing(current);
           state.pendingRemoteNote = null;
           state.hasUnsavedChanges = false;
           applyCurrentNoteToEditor({ force: true });
@@ -1060,7 +1302,7 @@ function bootstrapApp() {
       await flushPendingSave();
     }
     state.currentNoteId = note.id;
-    state.currentNote = { ...note };
+    state.currentNote = sanitizeNoteForEditing(note);
     state.hasUnsavedChanges = false;
     applyCurrentNoteToEditor({ force: true });
     updateActiveNoteHighlight();
@@ -1074,13 +1316,20 @@ function bootstrapApp() {
     if (state.currentNoteId === noteId && state.currentNote) {
       return;
     }
-    const target = state.notes.find((note) => note.id === noteId);
+    const target = getNoteFromState(noteId);
     if (!target) return;
     await openNote(target);
   }
 
   function updateLocalNoteCache(noteId, updates) {
-    state.notes = state.notes.map((note) => (note.id === noteId ? { ...note, ...updates } : note));
+    if (!(state.notesById instanceof Map)) {
+      return;
+    }
+    const target = state.notesById.get(noteId);
+    if (!target) {
+      return;
+    }
+    Object.assign(target, updates);
   }
 
   function handleTitleInput(event) {
@@ -1093,10 +1342,36 @@ function bootstrapApp() {
       `.note-card[data-note-id="${state.currentNoteId}"] .note-card-title`
     );
     if (activeTitle) {
-      activeTitle.textContent =
+      const resolvedTitle =
         state.currentNote.title && state.currentNote.title.trim()
           ? state.currentNote.title.trim()
           : "Sans titre";
+      activeTitle.textContent = resolvedTitle;
+      const row = activeTitle.closest(".note-row");
+      if (row) {
+        const addChildBtn = row.querySelector(".note-add-child");
+        if (addChildBtn) {
+          addChildBtn.setAttribute(
+            "aria-label",
+            `Créer une sous-fiche dans \"${resolvedTitle}\"`
+          );
+        }
+        const deleteBtn = row.querySelector(".note-delete");
+        if (deleteBtn) {
+          deleteBtn.setAttribute(
+            "aria-label",
+            `Supprimer la fiche \"${resolvedTitle}\"`
+          );
+        }
+        const toggleBtn = row.querySelector(".note-toggle");
+        if (toggleBtn) {
+          const isCollapsed = state.collapsedNoteIds.has(state.currentNoteId);
+          toggleBtn.setAttribute(
+            "aria-label",
+            `${isCollapsed ? "Développer" : "Réduire"} la fiche ${resolvedTitle}`
+          );
+        }
+      }
     }
     updateActiveNoteHighlight();
     updateSaveStatus("dirty");
@@ -2100,16 +2375,44 @@ function bootstrapApp() {
     }
   }
 
-  async function createNote() {
+  function getSiblingCollection(parentId) {
+    if (!parentId) {
+      return state.notes;
+    }
+    const parent = getNoteFromState(parentId);
+    return parent && Array.isArray(parent.children) ? parent.children : [];
+  }
+
+  function getNextSiblingPosition(parentId) {
+    const siblings = getSiblingCollection(parentId);
+    if (!siblings || siblings.length === 0) {
+      return 0;
+    }
+    return (
+      siblings.reduce((max, sibling) => {
+        const value = Number.isFinite(sibling.position) ? sibling.position : 0;
+        return Math.max(max, value);
+      }, 0) + 1
+    );
+  }
+
+  async function createNote(parentId = null) {
     if (!state.pseudo) return;
+    const safeParentId = typeof parentId === "string" && parentId.trim() !== "" ? parentId.trim() : null;
     try {
       const notesRef = collection(db, "users", state.pseudo, "notes");
-      const docRef = await addDoc(notesRef, {
+      const payload = {
         title: "Nouvelle fiche",
         contentHtml: "",
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: serverTimestamp(),
+        parentId: safeParentId,
+        position: getNextSiblingPosition(safeParentId),
+      };
+      const docRef = await addDoc(notesRef, payload);
+      if (safeParentId) {
+        state.collapsedNoteIds.delete(safeParentId);
+      }
       state.pendingSelectionId = docRef.id;
       showToast("Fiche créée", "success");
     } catch (error) {
@@ -2122,15 +2425,58 @@ function bootstrapApp() {
     }
   }
 
+  function collectDescendantIds(note) {
+    if (!note || !Array.isArray(note.children)) {
+      return [];
+    }
+    const stack = [...note.children];
+    const ids = [];
+    while (stack.length) {
+      const current = stack.pop();
+      ids.push(current.id);
+      if (Array.isArray(current.children) && current.children.length) {
+        stack.push(...current.children);
+      }
+    }
+    return ids;
+  }
+
+  function collectNoteHierarchyIds(noteId) {
+    const root = getNoteFromState(noteId);
+    if (!root) {
+      return [noteId];
+    }
+    return [root.id, ...collectDescendantIds(root)];
+  }
+
+  function countDescendants(note) {
+    if (!note || !Array.isArray(note.children)) {
+      return 0;
+    }
+    return note.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+  }
+
   async function deleteNote(noteId) {
     if (!state.pseudo || !noteId) return;
-    const note = state.notes.find((item) => item.id === noteId);
-    const confirmed = window.confirm(`Supprimer la fiche "${note?.title || "Sans titre"}" ?`);
+    const note = getNoteFromState(noteId);
+    const titleText = note?.title && note.title.trim() ? note.title.trim() : "Sans titre";
+    const descendantCount = note ? countDescendants(note) : 0;
+    const confirmationMessage =
+      descendantCount > 0
+        ? `Supprimer la fiche "${titleText}" et ses ${descendantCount} sous-fiche${
+            descendantCount > 1 ? "s" : ""
+          } ?`
+        : `Supprimer la fiche "${titleText}" ?`;
+    const confirmed = window.confirm(confirmationMessage);
     if (!confirmed) return;
     try {
       await flushPendingSave();
-      await deleteDoc(doc(db, "users", state.pseudo, "notes", noteId));
-      if (state.currentNoteId === noteId) {
+      const idsToDelete = collectNoteHierarchyIds(noteId);
+      for (const id of idsToDelete) {
+        await deleteDoc(doc(db, "users", state.pseudo, "notes", id));
+        state.collapsedNoteIds.delete(id);
+      }
+      if (state.currentNoteId && idsToDelete.includes(state.currentNoteId)) {
         state.currentNoteId = null;
         state.currentNote = null;
         state.hasUnsavedChanges = false;
@@ -2196,7 +2542,7 @@ function bootstrapApp() {
   function subscribeToNotes() {
     if (!state.pseudo) return;
     const ref = collection(db, "users", state.pseudo, "notes");
-    const q = query(ref, orderBy("updatedAt", "desc"));
+    const q = query(ref, orderBy("parentId"), orderBy("position"), orderBy("updatedAt", "desc"));
     if (state.notesUnsubscribe) {
       state.notesUnsubscribe();
     }
@@ -2332,6 +2678,8 @@ function bootstrapApp() {
     state.pendingDisplayName = null;
     state.pendingVisibility = null;
     state.notes = [];
+    state.notesById = new Map();
+    state.collapsedNoteIds = new Set();
     state.currentNoteId = null;
     state.currentNote = null;
     state.pendingSelectionId = null;
