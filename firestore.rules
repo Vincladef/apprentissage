@@ -21,8 +21,8 @@ service cloud.firestore {
     }
 
     function hasMatchingPseudo(userId) {
-      return (let email = normalizedAuthEmail();
-        email != null && email == expectedEmailFor(userId));
+      let email = normalizedAuthEmail();
+      return email != null && email == expectedEmailFor(userId);
     }
 
     function userRecord(userId) {
@@ -30,16 +30,15 @@ service cloud.firestore {
     }
 
     function ownerMatches(userId) {
+      let record = userRecord(userId);
+      let email = normalizedAuthEmail();
       return isSignedIn() &&
-        (let record = userRecord(userId);
-          record.exists() &&
-          (
-            (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) ||
-            (let email = normalizedAuthEmail();
-              email != null &&
-              record.data.ownerEmail is string &&
-              lower(record.data.ownerEmail) == email)
-          )
+        record.exists() &&
+        (
+          (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) ||
+          (email != null &&
+            record.data.ownerEmail is string &&
+            lower(record.data.ownerEmail) == email)
         );
     }
 
@@ -48,12 +47,12 @@ service cloud.firestore {
     }
 
     function ensureOwnerFields() {
+      let email = normalizedAuthEmail();
       return request.auth != null &&
         request.auth.uid != null &&
         request.resource.data.ownerUid is string &&
         request.resource.data.ownerUid == request.auth.uid &&
-        (let email = normalizedAuthEmail();
-          email != null &&
+        (email != null &&
           request.resource.data.ownerEmail is string &&
           lower(request.resource.data.ownerEmail) == email);
     }
