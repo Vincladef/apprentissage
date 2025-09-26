@@ -1416,6 +1416,15 @@ function bootstrapApp() {
     clearActiveCloze();
   }
 
+  function handleWindowResize() {
+    if (state.activeCloze) {
+      positionClozeFeedback(state.activeCloze);
+      requestAnimationFrame(() => positionClozeFeedback(state.activeCloze));
+      return;
+    }
+    hideClozeFeedback();
+  }
+
   function positionClozeFeedback(target) {
     if (!ui.clozeFeedback || !target) return;
     const wrapperRect = ui.editorWrapper.getBoundingClientRect();
@@ -1849,7 +1858,7 @@ function bootstrapApp() {
     }
     document.addEventListener("click", handleDocumentClick);
     document.addEventListener("selectionchange", handleSelectionChange);
-    window.addEventListener("resize", hideClozeFeedback);
+    window.addEventListener("resize", handleWindowResize);
     window.addEventListener("beforeunload", (event) => {
       if (state.hasUnsavedChanges) {
         event.preventDefault();
