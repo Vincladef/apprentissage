@@ -34,6 +34,11 @@ body {
   flex-direction: column;
 }
 
+body.keyboard-visible {
+  min-height: 100%;
+  height: auto;
+}
+
 body.notes-drawer-open {
   overflow: hidden;
 }
@@ -1361,5 +1366,35 @@ body.notes-drawer-open .drawer-overlay {
     .editor {
       min-height: calc(100dvh - var(--header-height) - 4.5rem);
     }
+  }
+}
+
+@media (max-width: 900px) {
+  body.keyboard-visible .app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+  }
+
+  body.keyboard-visible .app-main {
+    padding-top: calc(var(--header-height) + 1rem);
+  }
+
+  body.keyboard-visible .note-list {
+    min-height: auto;
+    height: auto;
+  }
+
+  body.keyboard-visible .notes-container {
+    max-height: none;
+    height: auto;
+  }
+
+  body.keyboard-visible .editor-area,
+  body.keyboard-visible .editor {
+    min-height: auto;
+    height: auto;
   }
 }

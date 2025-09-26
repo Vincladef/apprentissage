@@ -220,6 +220,56 @@ function bootstrapApp() {
   const bodyElement = document.body;
   const rootElement = document.documentElement;
   const headerElement = document.querySelector(".app-header");
+  const visualViewport = window.visualViewport ?? null;
+
+  const KEYBOARD_VISIBLE_CLASS = "keyboard-visible";
+  const KEYBOARD_HEIGHT_THRESHOLD = 120;
+  let viewportKeyboardVisible = false;
+  let baselineViewportHeight = visualViewport?.height ?? window.innerHeight;
+
+  function updateKeyboardVisibility() {
+    if (!bodyElement) {
+      return;
+    }
+    const shouldShow = Boolean(state.isEditorFocused || viewportKeyboardVisible);
+    bodyElement.classList.toggle(KEYBOARD_VISIBLE_CLASS, shouldShow);
+  }
+
+  function resetViewportBaseline() {
+    baselineViewportHeight = visualViewport?.height ?? window.innerHeight;
+  }
+
+  function handleVisualViewportChange() {
+    if (!visualViewport) {
+      return;
+    }
+
+    const currentHeight = visualViewport.height;
+    if (typeof currentHeight !== "number") {
+      return;
+    }
+
+    if (!viewportKeyboardVisible && currentHeight > baselineViewportHeight) {
+      baselineViewportHeight = currentHeight;
+    }
+
+    const delta = baselineViewportHeight - currentHeight;
+    const isVisible = delta > KEYBOARD_HEIGHT_THRESHOLD;
+
+    if (isVisible !== viewportKeyboardVisible) {
+      viewportKeyboardVisible = isVisible;
+      updateKeyboardVisibility();
+    }
+
+    if (!isVisible && !state.isEditorFocused) {
+      resetViewportBaseline();
+    }
+  }
+
+  if (visualViewport) {
+    visualViewport.addEventListener("resize", handleVisualViewportChange);
+    visualViewport.addEventListener("scroll", handleVisualViewportChange);
+  }
 
   let lastHeaderHeight = 0;
 
@@ -248,7 +298,12 @@ function bootstrapApp() {
   } else {
     window.addEventListener("resize", updateToolbarOffsets, { passive: true });
   }
-  window.addEventListener("orientationchange", updateToolbarOffsets, { passive: true });
+  window.addEventListener("orientationchange", () => {
+    updateToolbarOffsets();
+    resetViewportBaseline();
+    viewportKeyboardVisible = false;
+    updateKeyboardVisibility();
+  }, { passive: true });
 
   function keepHeaderVisible() {
     if (!bodyElement) {
@@ -256,6 +311,31 @@ function bootstrapApp() {
     }
 
     bodyElement.classList.remove("header-collapsed");
+  }
+
+  function handleEditorFocus() {
+    state.isEditorFocused = true;
+    if (visualViewport) {
+      baselineViewportHeight = Math.max(
+        baselineViewportHeight,
+        visualViewport.height ?? baselineViewportHeight
+      );
+    }
+    rememberEditorSelection();
+    updateKeyboardVisibility();
+  }
+
+  function handleEditorBlur() {
+    state.isEditorFocused = false;
+    if (!viewportKeyboardVisible) {
+      resetViewportBaseline();
+    }
+    updateKeyboardVisibility();
+    if (!state.hasUnsavedChanges) {
+      applyPendingRemoteNote();
+    } else {
+      state.pendingRemoteNote = null;
+    }
   }
 
   window.addEventListener("scroll", keepHeaderVisible, { passive: true });
@@ -1754,21 +1834,11 @@ function bootstrapApp() {
     ui.noteEditor.addEventListener("input", handleEditorInput);
     ui.noteEditor.addEventListener("click", handleEditorClick);
     ui.noteEditor.addEventListener("scroll", hideClozeFeedback);
-    ui.noteEditor.addEventListener("focus", () => {
-      state.isEditorFocused = true;
-      rememberEditorSelection();
-    });
+    ui.noteEditor.addEventListener("focus", handleEditorFocus);
     ui.noteEditor.addEventListener("keyup", rememberEditorSelection);
     ui.noteEditor.addEventListener("mouseup", rememberEditorSelection);
     ui.noteEditor.addEventListener("touchend", rememberEditorSelection);
-    ui.noteEditor.addEventListener("blur", () => {
-      state.isEditorFocused = false;
-      if (!state.hasUnsavedChanges) {
-        applyPendingRemoteNote();
-      } else {
-        state.pendingRemoteNote = null;
-      }
-    });
+    ui.noteEditor.addEventListener("blur", handleEditorBlur);
     ui.toolbar.addEventListener("click", handleToolbarClick);
     ui.toolbar.addEventListener("change", handleToolbarChange);
     if (ui.toolbarMoreBtn) {
