@@ -1057,7 +1057,11 @@ function bootstrapApp() {
       const selectionBeforeShortcut = state.savedSelection
         ? { ...state.savedSelection }
         : null;
-      const transformed = runWithPreservedSelection(() => applyClozeShortcut());
+      const transformedResult = runWithPreservedSelection(() => applyClozeShortcut());
+      const transformed =
+        transformedResult && typeof transformedResult === "object"
+          ? Boolean(transformedResult.success)
+          : Boolean(transformedResult);
       if (!transformed && selectionBeforeShortcut) {
         focusEditorPreservingSelection(selectionBeforeShortcut);
       }
@@ -1189,13 +1193,93 @@ function bootstrapApp() {
     return true;
   }
 
-  function focusEditorPreservingSelection(preservedSelection = null) {
-    if (!ui.noteEditor) return;
-    const selectionToRestore = preservedSelection || state.savedSelection || null;
-    ui.noteEditor.focus({ preventScroll: true });
-    if (selectionToRestore) {
-      restoreSelection(ui.noteEditor, selectionToRestore);
+  function resolveSelectionOverride(override) {
+    if (!override) {
+      return null;
     }
+    if (override instanceof Range) {
+      return override;
+    }
+    if (override instanceof Node) {
+      const range = document.createRange();
+      range.setStartAfter(override);
+      range.collapse(true);
+      return range;
+    }
+    if (
+      typeof override === "object" &&
+      override !== null &&
+      override.node instanceof Node
+    ) {
+      const range = document.createRange();
+      const position = override.position === "before" ? "before" : "after";
+      if (position === "before") {
+        range.setStartBefore(override.node);
+      } else {
+        range.setStartAfter(override.node);
+      }
+      range.collapse(true);
+      return range;
+    }
+    if (
+      typeof override === "object" &&
+      override !== null &&
+      override.range instanceof Range
+    ) {
+      return override.range;
+    }
+    return null;
+  }
+
+  function focusEditorPreservingSelection(argument = undefined) {
+    if (!ui.noteEditor) return;
+
+    let savedSelectionOption = undefined;
+    let selectionOverrideOption = null;
+
+    if (
+      argument &&
+      typeof argument === "object" &&
+      !("start" in argument && "end" in argument) &&
+      ("savedSelection" in argument ||
+        "selectionOverride" in argument ||
+        "range" in argument)
+    ) {
+      savedSelectionOption = argument.savedSelection;
+      selectionOverrideOption =
+        argument.selectionOverride !== undefined
+          ? argument.selectionOverride
+          : argument.range;
+    } else if (argument instanceof Range) {
+      savedSelectionOption = null;
+      selectionOverrideOption = argument;
+    } else {
+      savedSelectionOption = argument;
+    }
+
+    const resolvedOverride = resolveSelectionOverride(selectionOverrideOption);
+    const selectionToRestore =
+      savedSelectionOption !== undefined ? savedSelectionOption : state.savedSelection;
+
+    ui.noteEditor.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    let applied = false;
+
+    if (selection && resolvedOverride) {
+      const rangeToApply =
+        typeof resolvedOverride.cloneRange === "function"
+          ? resolvedOverride.cloneRange()
+          : resolvedOverride;
+      selection.removeAllRanges();
+      selection.addRange(rangeToApply);
+      applied = true;
+    } else if (selection && selectionToRestore) {
+      restoreSelection(ui.noteEditor, selectionToRestore);
+      applied = true;
+    } else if (selection && !resolvedOverride && savedSelectionOption === null) {
+      selection.removeAllRanges();
+    }
+
     rememberEditorSelection();
   }
 
@@ -1205,8 +1289,21 @@ function bootstrapApp() {
     }
     restoreEditorSelection();
     const result = operation();
+    let selectionOverride = null;
+    if (result instanceof Range || result instanceof Node) {
+      selectionOverride = result;
+    } else if (result && typeof result === "object") {
+      if (result.selectionOverride) {
+        selectionOverride = result.selectionOverride;
+      } else if (result.wrapper) {
+        selectionOverride = { node: result.wrapper, position: "after" };
+      }
+    }
     const updatedSelection = captureSelection(ui.noteEditor);
-    focusEditorPreservingSelection(updatedSelection);
+    focusEditorPreservingSelection({
+      savedSelection: updatedSelection,
+      selectionOverride,
+    });
     return result;
   }
 
@@ -1397,12 +1494,12 @@ function bootstrapApp() {
 
   function applyClozeShortcut() {
     if (state.isRevisionMode || !ui.noteEditor) {
-      return false;
+      return { success: false };
     }
 
     const editor = ui.noteEditor;
     if (!editor.textContent || !editor.textContent.includes("##")) {
-      return false;
+      return { success: false };
     }
 
     const selectionInfo = captureSelection(editor);
@@ -1497,7 +1594,7 @@ function bootstrapApp() {
     }
 
     if (!bestMatch || !bestMatch.node || !bestMatch.node.parentNode) {
-      return false;
+      return { success: false };
     }
 
     const { node, start, end, inner } = bestMatch;
@@ -1518,20 +1615,23 @@ function bootstrapApp() {
     range.insertNode(wrapper);
     refreshClozeElement(wrapper);
 
-    const selection = window.getSelection();
-    if (selection && wrapper.parentNode) {
+    const selectionOverride = (() => {
       try {
         const afterRange = document.createRange();
         afterRange.setStartAfter(wrapper);
         afterRange.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(afterRange);
+        return afterRange;
       } catch (error) {
-        console.error("Impossible de positionner le curseur après le trou", error);
+        console.error("Impossible de calculer la nouvelle position du curseur", error);
+        return null;
       }
-    }
+    })();
 
-    return true;
+    return {
+      success: true,
+      wrapper,
+      selectionOverride,
+    };
   }
 
   function createClozeFromSelection() {
