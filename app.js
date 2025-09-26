@@ -1026,12 +1026,36 @@ function bootstrapApp() {
     scheduleSave();
   }
 
-  function handleEditorInput(options = {}) {
+  function handleEditorInput(arg = {}) {
     if (!state.currentNote) return;
+
+    let event = null;
+    let options = {};
+    if (arg instanceof Event) {
+      event = arg;
+    } else if (arg && typeof arg === "object") {
+      options = arg;
+    }
+
     const { bypassReadOnly = false } = options;
     if (state.isRevisionMode && !bypassReadOnly) {
       return;
     }
+
+    const isInputEvent =
+      event && typeof InputEvent !== "undefined" && event instanceof InputEvent;
+    const isHashInsertion =
+      !state.isRevisionMode &&
+      isInputEvent &&
+      typeof event.data === "string" &&
+      event.data === "#" &&
+      typeof event.inputType === "string" &&
+      event.inputType.startsWith("insert");
+
+    if (isHashInsertion) {
+      runWithPreservedSelection(() => applyClozeShortcut());
+    }
+
     refreshAllClozes();
     state.currentNote.contentHtml = ui.noteEditor.innerHTML;
     state.hasUnsavedChanges = true;
@@ -1328,6 +1352,132 @@ function bootstrapApp() {
     if (!ui.noteEditor) return;
     const clozes = ui.noteEditor.querySelectorAll(".cloze");
     clozes.forEach((cloze) => refreshClozeElement(cloze));
+  }
+
+  function applyClozeShortcut() {
+    if (state.isRevisionMode || !ui.noteEditor) {
+      return false;
+    }
+
+    const editor = ui.noteEditor;
+    if (!editor.textContent || !editor.textContent.includes("##")) {
+      return false;
+    }
+
+    const selectionInfo = captureSelection(editor);
+    const caretOffset = selectionInfo ? selectionInfo.start : null;
+
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null);
+    let traversed = 0;
+    let bestMatch = null;
+    let stopSearch = false;
+
+    while (!stopSearch && walker.nextNode()) {
+      const textNode = walker.currentNode;
+      if (!textNode) {
+        continue;
+      }
+      const value = textNode.nodeValue || "";
+      const length = value.length;
+      const parentElement = textNode.parentElement;
+      if (parentElement && parentElement.closest && parentElement.closest(".cloze")) {
+        traversed += length;
+        continue;
+      }
+      if (!value.includes("##")) {
+        traversed += length;
+        continue;
+      }
+
+      const regex = /##([^#]+?)##/g;
+      let match;
+      while ((match = regex.exec(value)) !== null) {
+        const fullMatch = match[0];
+        if (!fullMatch) {
+          continue;
+        }
+        const innerContent = fullMatch.slice(2, -2);
+        if (!innerContent) {
+          continue;
+        }
+        const start = match.index;
+        const end = start + fullMatch.length;
+        if (end <= start) {
+          continue;
+        }
+
+        const globalStart = traversed + start;
+        const globalEnd = traversed + end;
+        const containsCaret =
+          typeof caretOffset === "number" &&
+          caretOffset >= globalStart &&
+          caretOffset <= globalEnd;
+        const distance =
+          typeof caretOffset === "number"
+            ? containsCaret
+              ? 0
+              : Math.min(
+                  Math.abs(caretOffset - globalStart),
+                  Math.abs(caretOffset - globalEnd)
+                )
+            : globalStart;
+
+        const candidate = {
+          node: textNode,
+          start,
+          end,
+          inner: innerContent,
+          containsCaret,
+          distance,
+          globalStart,
+        };
+
+        if (!bestMatch) {
+          bestMatch = candidate;
+        } else if (candidate.containsCaret && !bestMatch.containsCaret) {
+          bestMatch = candidate;
+        } else if (candidate.containsCaret === bestMatch.containsCaret) {
+          if (
+            candidate.distance < bestMatch.distance ||
+            (candidate.distance === bestMatch.distance &&
+              candidate.globalStart >= bestMatch.globalStart)
+          ) {
+            bestMatch = candidate;
+          }
+        }
+
+        if (candidate.containsCaret) {
+          stopSearch = true;
+          break;
+        }
+      }
+
+      traversed += length;
+    }
+
+    if (!bestMatch || !bestMatch.node || !bestMatch.node.parentNode) {
+      return false;
+    }
+
+    const { node, start, end, inner } = bestMatch;
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, end);
+
+    const wrapper = document.createElement("span");
+    wrapper.className = "cloze";
+    wrapper.dataset.placeholder = generateClozePlaceholder();
+    wrapper.dataset.points = "0";
+    wrapper.classList.add("cloze-masked");
+
+    const innerNode = document.createTextNode(inner);
+    wrapper.appendChild(innerNode);
+
+    range.deleteContents();
+    range.insertNode(wrapper);
+    refreshClozeElement(wrapper);
+
+    return true;
   }
 
   function createClozeFromSelection() {
