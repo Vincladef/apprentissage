@@ -12,12 +12,12 @@ service cloud.firestore {
 
     function normalizedAuthEmail() {
       return isSignedIn() && request.auth.token.email != null
-        ? lower(request.auth.token.email)
+        ? request.auth.token.email.lower()
         : null;
     }
 
     function expectedEmailFor(userId) {
-      return lower(userId) + "@" + authEmailDomain();
+      return userId.lower() + "@" + authEmailDomain();
     }
 
     function hasMatchingPseudo(userId) {
@@ -33,12 +33,13 @@ service cloud.firestore {
       let record = userRecord(userId);
       let email = normalizedAuthEmail();
       return isSignedIn() &&
-        record.exists() &&
+        record != null &&
+        record.data != null &&
         (
           (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) ||
           (email != null &&
             record.data.ownerEmail is string &&
-            lower(record.data.ownerEmail) == email)
+            record.data.ownerEmail.lower() == email)
         );
     }
 
@@ -54,7 +55,7 @@ service cloud.firestore {
         request.resource.data.ownerUid == request.auth.uid &&
         (email != null &&
           request.resource.data.ownerEmail is string &&
-          lower(request.resource.data.ownerEmail) == email);
+          request.resource.data.ownerEmail.lower() == email);
     }
 
     match /users/{userId} {
