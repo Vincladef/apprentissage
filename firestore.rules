@@ -61,7 +61,7 @@ service cloud.firestore {
       return role == 'viewer' || role == 'editor';
     }
 
-    function isValidNoteData(data) {
+    function isValidNoteData(data, userId) {
       return hasOnlyFields(data, [
           'title',
           'contentHtml',
@@ -70,7 +70,8 @@ service cloud.firestore {
           'parentId',
           'position',
           'members',
-          'published'
+          'published',
+          'ownerUid'
         ]) &&
         data.title is string &&
         data.contentHtml is string &&
@@ -79,12 +80,15 @@ service cloud.firestore {
         isOptionalString(data.parentId) &&
         isOptionalNumber(data.position) &&
         isOptionalBoolean(data.published) &&
+        data.ownerUid is string &&
+        data.ownerUid == userId &&
         isValidMembersMap(data.members);
     }
 
-    function isValidNoteUpdate(newData, currentData) {
-      return isValidNoteData(newData) &&
-        newData.createdAt == currentData.createdAt;
+    function isValidNoteUpdate(newData, currentData, userId) {
+      return isValidNoteData(newData, userId) &&
+        newData.createdAt == currentData.createdAt &&
+        newData.ownerUid == currentData.ownerUid;
     }
 
     function editorUpdateIsLimited(newData, currentData) {
@@ -121,7 +125,8 @@ service cloud.firestore {
       allow read, write: if false;
 
       match /notes/{noteId} {
-        allow create: if isOwner(userId) && isValidNoteData(request.resource.data);
+        allow create: if isOwner(userId) &&
+          isValidNoteData(request.resource.data, userId);
 
         allow read: if resource != null && (
           isOwner(userId) ||
@@ -132,7 +137,7 @@ service cloud.firestore {
 
         allow update: if resource != null && (
           (isOwner(userId) || isAdmin()) &&
-            isValidNoteUpdate(request.resource.data, resource.data) ||
+            isValidNoteUpdate(request.resource.data, resource.data, userId) ||
           (isSignedIn() && isEditor(resource.data) &&
             editorUpdateIsLimited(request.resource.data, resource.data) &&
             membersUnchanged(request.resource.data, resource.data) &&
