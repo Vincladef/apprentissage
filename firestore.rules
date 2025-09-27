@@ -2,70 +2,144 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function authEmailDomain() {
-      return "pseudo.apprentissage";
-    }
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function normalizedAuthEmail() {
-      return isSignedIn() && request.auth.token.email != null
-        ? request.auth.token.email.lower()
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function adminData() {
+      return isSignedIn()
+        ? get(/databases/$(database)/documents/config/admins).data
         : null;
     }
 
-    function expectedEmailFor(userId) {
-      return userId.lower() + "@" + authEmailDomain();
+    function isAdmin() {
+      let data = adminData();
+      return data != null && data[request.auth.uid] == true;
     }
 
-    function hasMatchingPseudo(userId) {
-      let email = normalizedAuthEmail();
-      return email != null && email == expectedEmailFor(userId);
+    function hasOnlyFields(data, allowedFields) {
+      return data.keys().hasOnly(allowedFields);
     }
 
-    function userRecord(userId) {
-      return get(/databases/$(database)/documents/users/$(userId));
+    function isOptionalString(value) {
+      return value == null || value is string;
     }
 
-    function ownerMatches(userId) {
-      let record = userRecord(userId);
-      let email = normalizedAuthEmail();
-      return isSignedIn() &&
-        record != null &&
-        record.data != null &&
-        (
-          (record.data.ownerUid is string && record.data.ownerUid == request.auth.uid) ||
-          (email != null &&
-            record.data.ownerEmail is string &&
-            record.data.ownerEmail.lower() == email)
-        );
+    function isOptionalNumber(value) {
+      return value == null || value is number;
     }
 
-    function isOwner(userId) {
-      return hasMatchingPseudo(userId) || ownerMatches(userId);
+    function isOptionalTimestamp(value) {
+      return value == null || value is timestamp;
     }
 
-    function ensureOwnerFields() {
-      let email = normalizedAuthEmail();
-      return request.auth != null &&
-        request.auth.uid != null &&
-        request.resource.data.ownerUid is string &&
-        request.resource.data.ownerUid == request.auth.uid &&
-        (email != null &&
-          request.resource.data.ownerEmail is string &&
-          request.resource.data.ownerEmail.lower() == email);
+    function isOptionalBoolean(value) {
+      return value == null || value is bool;
+    }
+
+    function isValidMembersMap(members) {
+      return members == null || (
+        members is map &&
+        members.values().hasOnly(['viewer', 'editor'])
+      );
+    }
+
+    function memberRole(data) {
+      return data.members is map ? data.members[request.auth.uid] : null;
+    }
+
+    function isEditor(data) {
+      return memberRole(data) == 'editor';
+    }
+
+    function canMemberRead(data) {
+      let role = memberRole(data);
+      return role == 'viewer' || role == 'editor';
+    }
+
+    function isValidNoteData(data) {
+      return hasOnlyFields(data, [
+          'title',
+          'contentHtml',
+          'createdAt',
+          'updatedAt',
+          'parentId',
+          'position',
+          'members',
+          'published'
+        ]) &&
+        data.title is string &&
+        data.contentHtml is string &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        isOptionalString(data.parentId) &&
+        isOptionalNumber(data.position) &&
+        isOptionalBoolean(data.published) &&
+        isValidMembersMap(data.members);
+    }
+
+    function isValidNoteUpdate(newData, currentData) {
+      return isValidNoteData(newData) &&
+        newData.createdAt == currentData.createdAt;
+    }
+
+    function editorUpdateIsLimited(newData, currentData) {
+      let diff = newData.diff(currentData).affectedKeys();
+      return diff.hasOnly(['title', 'contentHtml', 'updatedAt']);
+    }
+
+    function membersUnchanged(newData, currentData) {
+      return newData.members == currentData.members;
+    }
+
+    match /config/{documentId} {
+      allow get: if true;
+      allow list, create, update, delete: if false;
+    }
+
+    match /profiles/{userId} {
+      function isValidProfileData(data) {
+        return hasOnlyFields(data, ['pseudo', 'createdAt', 'updatedAt']) &&
+          (data.pseudo == null || data.pseudo is string) &&
+          isOptionalTimestamp(data.createdAt) &&
+          isOptionalTimestamp(data.updatedAt);
+      }
+
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidProfileData(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidProfileData(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId);
     }
 
     match /users/{userId} {
-      allow create: if isSignedIn() && hasMatchingPseudo(userId) && ensureOwnerFields();
-      allow read: if true;
-      allow update: if isOwner(userId) && ensureOwnerFields();
-      allow delete: if isOwner(userId);
+      allow read, write: if false;
 
       match /notes/{noteId} {
-        allow read, create, update, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidNoteData(request.resource.data);
+
+        allow read: if resource != null && (
+          isOwner(userId) ||
+          isAdmin() ||
+          canMemberRead(resource.data) ||
+          (resource.data.published == true)
+        );
+
+        allow update: if resource != null && (
+          (isOwner(userId) || isAdmin()) &&
+            isValidNoteUpdate(request.resource.data, resource.data) ||
+          (isSignedIn() && isEditor(resource.data) &&
+            editorUpdateIsLimited(request.resource.data, resource.data) &&
+            membersUnchanged(request.resource.data, resource.data) &&
+            request.resource.data.published == resource.data.published)
+        );
+
+        allow delete: if resource != null && (isOwner(userId) || isAdmin());
       }
     }
   }
