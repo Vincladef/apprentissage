@@ -42,6 +42,17 @@
             >
               Mode révision
             </button>
+            <button
+              type="button"
+              id="share-note-btn"
+              class="header-mode-toggle ghost"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+              aria-label="Partager cette fiche"
+              disabled
+            >
+              Partager
+            </button>
             <div class="header-menu-wrapper">
               <button
                 type="button"
@@ -366,6 +377,81 @@
         <div id="drawer-overlay" class="drawer-overlay" hidden></div>
       </section>
     </main>
+
+    <div id="share-dialog-backdrop" class="share-dialog-backdrop hidden" aria-hidden="true"></div>
+    <section
+      id="share-dialog"
+      class="share-dialog hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="share-dialog-title"
+      aria-describedby="share-dialog-description"
+      aria-hidden="true"
+    >
+      <div class="share-dialog__container" role="document">
+        <header class="share-dialog__header">
+          <div class="share-dialog__titles">
+            <h2 id="share-dialog-title">Partager la fiche</h2>
+            <p id="share-dialog-description" class="muted small">
+              Invitez des personnes pour qu'elles puissent consulter ou éditer cette fiche.
+            </p>
+          </div>
+          <button
+            type="button"
+            id="share-dialog-close"
+            class="share-dialog__close"
+            aria-label="Fermer la fenêtre de partage"
+          >
+            ✕
+          </button>
+        </header>
+
+        <form id="share-form" class="share-dialog__body" novalidate>
+          <div id="share-restriction" class="share-dialog__notice hidden" role="note"></div>
+
+          <section class="share-section" aria-labelledby="share-members-heading">
+            <div class="share-section__header">
+              <h3 id="share-members-heading">Membres</h3>
+              <p class="muted small">Définissez le rôle de chaque personne.</p>
+            </div>
+            <ul id="share-members-list" class="share-member-list" aria-live="polite"></ul>
+            <p id="share-members-empty" class="muted small share-empty-message hidden">
+              Aucun collaborateur n'a encore été ajouté.
+            </p>
+          </section>
+
+          <section class="share-section" aria-labelledby="share-search-heading">
+            <div class="share-section__header">
+              <h3 id="share-search-heading">Ajouter un membre</h3>
+              <p class="muted small">
+                Recherchez par adresse e-mail ou par pseudo pour inviter un collaborateur.
+              </p>
+            </div>
+            <label class="share-field-label" for="share-search-input">Recherche</label>
+            <input
+              id="share-search-input"
+              type="search"
+              placeholder="Entrez un e-mail ou un pseudo"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="share-search-status"
+            />
+            <p id="share-search-status" class="share-status-message" role="status" aria-live="polite"></p>
+            <ul id="share-search-results" class="share-search-results" aria-live="polite"></ul>
+            <p id="share-search-empty" class="muted small share-empty-message hidden">
+              Aucun résultat pour cette recherche.
+            </p>
+          </section>
+
+          <div id="share-dialog-error" class="share-dialog__error hidden" role="alert"></div>
+
+          <footer class="share-dialog__footer">
+            <button type="button" id="share-dialog-cancel" class="ghost">Annuler</button>
+            <button type="submit" id="share-dialog-save" class="primary" disabled>Enregistrer</button>
+          </footer>
+        </form>
+      </div>
+    </section>
 
     <div id="toast" class="toast hidden" role="status" aria-live="assertive"></div>
 
