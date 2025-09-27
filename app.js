@@ -2854,6 +2854,7 @@ function bootstrapApp() {
 
     const row = document.createElement("div");
     row.className = "note-row";
+    row.classList.add(hasChildren ? "note-row--has-toggle" : "note-row--no-toggle");
     row.style.setProperty("--note-depth", String(Math.max(level - 1, 0)));
 
     let toggleButton = null;

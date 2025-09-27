@@ -596,6 +596,20 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   justify-content: center;
 }
 
+@media (min-width: 901px) {
+  .note-row--no-toggle .note-toggle-spacer {
+    width: 0;
+  }
+
+  .note-row--no-toggle {
+    gap: 0;
+  }
+
+  .note-row--no-toggle .note-row-actions {
+    margin-left: 0.3rem;
+  }
+}
+
 .note-toggle {
   background: transparent;
   border: 1px solid transparent;
