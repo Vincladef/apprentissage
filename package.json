@@ -1,0 +1,20 @@
+{
+  "name": "apprentissage",
+  "version": "1.0.0",
+  "description": "Application web de prise de notes et de révision active avec texte à trous et répétition espacée. Le frontend est une page statique (compatibles GitHub Pages) et la persistance des données est gérée par Firebase Firestore.",
+  "main": "app.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "firebase": "^12.3.0"
+  }
+}

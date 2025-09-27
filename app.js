@@ -22,13 +22,12 @@ import {
   getAuth,
   setPersistence,
   browserLocalPersistence,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { signIn, signUp, resetPassword } from "./auth.js";
+import { shareNoteByEmail } from "./sharing.js";
 
 const REQUIRED_FIREBASE_CONFIG_KEYS = [
   "apiKey",
@@ -1281,13 +1280,35 @@ function bootstrapApp() {
       console.warn("Impossible de synchroniser la fiche avant l'enregistrement du partage", error);
     }
 
-    const membersPayload = {};
-    state.share.members.forEach((memberRole, memberId) => {
-      membersPayload[memberId] = normalizeShareRole(memberRole);
-    });
+    const noteRef = doc(db, "users", state.userId, "notes", state.currentNoteId);
+    const resolvedMembers = [];
+    for (const [memberId, memberRole] of state.share.members.entries()) {
+      const normalizedRole = normalizeShareRole(memberRole);
+      const cachedProfile = getCachedShareProfile(memberId);
+      const email =
+        typeof cachedProfile?.email === "string" ? cachedProfile.email.trim() : "";
+      if (email) {
+        try {
+          const result = await shareNoteByEmail(noteRef, email, normalizedRole);
+          resolvedMembers.push([result.uid, result.role]);
+          continue;
+        } catch (shareError) {
+          console.error("Impossible de partager la fiche via l'e-mail fourni", shareError);
+          state.share.isSaving = false;
+          state.share.errorMessage =
+            shareError instanceof Error && shareError.message
+              ? shareError.message
+              : "Impossible d'ajouter ce membre par e-mail.";
+          renderShareDialog();
+          return;
+        }
+      }
+      resolvedMembers.push([memberId, normalizedRole]);
+    }
+    const membersPayload = Object.fromEntries(resolvedMembers);
+    state.share.members = new Map(resolvedMembers);
 
     try {
-      const noteRef = doc(db, "users", state.userId, "notes", state.currentNoteId);
       await updateDoc(noteRef, {
         members: membersPayload,
         updatedAt: serverTimestamp(),
@@ -3793,7 +3814,7 @@ function bootstrapApp() {
     }
     setFormPending(form, true);
     try {
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      const credential = await signUp(auth, email, password);
       const user = credential.user;
       if (user?.uid) {
         const profileRef = doc(db, "profiles", user.uid);
@@ -3832,7 +3853,7 @@ function bootstrapApp() {
     }
     setFormPending(form, true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signIn(auth, email, password);
     } catch (error) {
       console.error("Erreur lors de la connexion", error);
       setAuthMessage(ui.loginError, getAuthErrorMessage(error, "login"));
@@ -3857,7 +3878,7 @@ function bootstrapApp() {
     }
     setFormPending(form, true);
     try {
-      await sendPasswordResetEmail(auth, email);
+      await resetPassword(auth, email);
       setAuthMessage(
         ui.resetSuccess,
         "Un e-mail de réinitialisation vient d'être envoyé si le compte existe."
