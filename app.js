@@ -2355,22 +2355,45 @@ function bootstrapApp() {
 
     event.preventDefault();
 
+    const rect = img.getBoundingClientRect();
+    const naturalWidth = Number.isFinite(img.naturalWidth) ? img.naturalWidth : 0;
+    const naturalHeight = Number.isFinite(img.naturalHeight) ? img.naturalHeight : 0;
+    let aspectRatio =
+      naturalWidth > 0 && naturalHeight > 0
+        ? naturalWidth / naturalHeight
+        : rect.width > 0 && rect.height > 0
+          ? rect.width / rect.height
+          : startWidth > 0 && startHeight > 0
+            ? startWidth / startHeight
+            : 1;
+    if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) {
+      aspectRatio = 1;
+    }
+
     const deltaX = event.clientX - startX;
     const deltaY = event.clientY - startY;
+    const controlsHorizontal = handleDirection.includes('e') || handleDirection.includes('w');
+    const controlsVertical = handleDirection.includes('n') || handleDirection.includes('s');
+    if (!controlsHorizontal && !controlsVertical) {
+      return;
+    }
+
     let tentativeWidth = startWidth;
     let tentativeHeight = startHeight;
 
-    if (handleDirection.includes('e')) {
-      tentativeWidth = startWidth + deltaX;
+    if (controlsHorizontal) {
+      if (handleDirection.includes('e')) {
+        tentativeWidth = startWidth + deltaX;
+      } else if (handleDirection.includes('w')) {
+        tentativeWidth = startWidth - deltaX;
+      }
     }
-    if (handleDirection.includes('w')) {
-      tentativeWidth = startWidth - deltaX;
-    }
-    if (handleDirection.includes('s')) {
-      tentativeHeight = startHeight + deltaY;
-    }
-    if (handleDirection.includes('n')) {
-      tentativeHeight = startHeight - deltaY;
+    if (controlsVertical) {
+      if (handleDirection.includes('s')) {
+        tentativeHeight = startHeight + deltaY;
+      } else if (handleDirection.includes('n')) {
+        tentativeHeight = startHeight - deltaY;
+      }
     }
 
     const minWidth = IMAGE_RESIZE_MIN_WIDTH;
@@ -2380,20 +2403,79 @@ function bootstrapApp() {
     const baseHeight = img.naturalHeight || startHeight || minHeight;
     const maxHeight = Math.max(baseHeight, startHeight, minHeight) * 3;
 
-    const clampedWidth = Math.max(minWidth, Math.min(tentativeWidth, maxWidth));
-    const clampedHeight = Math.max(minHeight, Math.min(tentativeHeight, maxHeight));
+    const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
 
-    const widthArg = handleDirection.includes('e') || handleDirection.includes('w') ? clampedWidth : undefined;
-    const heightArg = handleDirection.includes('n') || handleDirection.includes('s') ? clampedHeight : undefined;
+    const resolveFromWidth = (widthValue) => {
+      let widthMinBound = minWidth;
+      let widthMaxBound = maxWidth;
+
+      const widthFromMinHeight = minHeight * aspectRatio;
+      if (Number.isFinite(widthFromMinHeight) && widthFromMinHeight > 0) {
+        widthMinBound = Math.max(widthMinBound, widthFromMinHeight);
+      }
+
+      const widthFromMaxHeight = maxHeight * aspectRatio;
+      if (Number.isFinite(widthFromMaxHeight) && widthFromMaxHeight > 0) {
+        widthMaxBound = Math.min(widthMaxBound, widthFromMaxHeight);
+      }
+
+      let resolvedWidth = Number.isFinite(widthValue) ? widthValue : startWidth;
+      if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+        resolvedWidth = startWidth > 0 ? startWidth : widthMinBound;
+      }
+      if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+        resolvedWidth = widthMinBound > 0 ? widthMinBound : minWidth;
+      }
+
+      if (widthMinBound > widthMaxBound) {
+        const candidateMin = clamp(widthMinBound, minWidth, maxWidth);
+        const candidateMax = clamp(widthMaxBound, minWidth, maxWidth);
+        const distanceToMin = Math.abs(resolvedWidth - candidateMin);
+        const distanceToMax = Math.abs(resolvedWidth - candidateMax);
+        resolvedWidth = distanceToMin <= distanceToMax ? candidateMin : candidateMax;
+      } else {
+        resolvedWidth = clamp(resolvedWidth, widthMinBound, widthMaxBound);
+      }
+
+      let resolvedHeight = resolvedWidth / aspectRatio;
+      if (!Number.isFinite(resolvedHeight) || resolvedHeight <= 0) {
+        resolvedHeight = startHeight > 0 ? startHeight : minHeight;
+      }
+
+      if (resolvedHeight < minHeight) {
+        resolvedHeight = minHeight;
+        resolvedWidth = clamp(resolvedHeight * aspectRatio, minWidth, maxWidth);
+        resolvedHeight = resolvedWidth / aspectRatio;
+      } else if (resolvedHeight > maxHeight) {
+        resolvedHeight = maxHeight;
+        resolvedWidth = clamp(resolvedHeight * aspectRatio, minWidth, maxWidth);
+        resolvedHeight = resolvedWidth / aspectRatio;
+      }
+
+      if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+        resolvedWidth = minWidth;
+        resolvedHeight = resolvedWidth / aspectRatio;
+      }
+      if (!Number.isFinite(resolvedHeight) || resolvedHeight <= 0) {
+        resolvedHeight = minHeight;
+        resolvedWidth = resolvedHeight * aspectRatio;
+      }
+
+      return { width: resolvedWidth, height: resolvedHeight };
+    };
+
+    const useWidthReference = controlsHorizontal && (!controlsVertical || Math.abs(tentativeWidth - startWidth) >= Math.abs(tentativeHeight - startHeight));
+    const widthInput = useWidthReference ? tentativeWidth : tentativeHeight * aspectRatio;
+    const { width: targetWidth, height: targetHeight } = resolveFromWidth(widthInput);
 
     const previousWidth = parseFloat(img.style.width);
     const previousHeight = parseFloat(img.style.height);
 
-    applyImageDimensions(wrapper, img, widthArg, heightArg);
+    const appliedDimensions = applyImageDimensions(wrapper, img, targetWidth, targetHeight);
     updateImageHandleAccessibility(wrapper, img);
 
-    const widthChanged = widthArg !== undefined && (!Number.isFinite(previousWidth) || Math.round(previousWidth) !== Math.round(clampedWidth));
-    const heightChanged = heightArg !== undefined && (!Number.isFinite(previousHeight) || Math.round(previousHeight) !== Math.round(clampedHeight));
+    const widthChanged = !Number.isFinite(previousWidth) || Math.round(previousWidth) !== appliedDimensions.width;
+    const heightChanged = !Number.isFinite(previousHeight) || Math.round(previousHeight) !== appliedDimensions.height;
     if (widthChanged || heightChanged) {
       imageResizeState.hasChanges = true;
     }
