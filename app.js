@@ -5,10 +5,15 @@ import {
   setDoc,
   getDoc,
   collection,
+  getDocs,
   addDoc,
   onSnapshot,
   query,
   orderBy,
+  where,
+  startAt,
+  endAt,
+  limit,
   updateDoc,
   deleteDoc,
   serverTimestamp
@@ -147,6 +152,74 @@ function bootstrapApp() {
   const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
   const CLOZE_MANUAL_REVEAL_ATTR = "data-manual-reveal";
 
+  const SHARE_ROLE_VIEWER = "viewer";
+  const SHARE_ROLE_EDITOR = "editor";
+  const SHARE_ROLES = new Set([SHARE_ROLE_VIEWER, SHARE_ROLE_EDITOR]);
+  const SHARE_ROLE_LABELS = {
+    [SHARE_ROLE_VIEWER]: "Lecteur",
+    [SHARE_ROLE_EDITOR]: "Éditeur",
+  };
+  const SHARE_SEARCH_DEBOUNCE_MS = 320;
+
+  function normalizeShareRole(role) {
+    if (typeof role === "string") {
+      const normalized = role.trim().toLowerCase();
+      if (SHARE_ROLES.has(normalized)) {
+        return normalized;
+      }
+    }
+    return SHARE_ROLE_VIEWER;
+  }
+
+  function sanitizeMembersRecord(rawMembers) {
+    if (!rawMembers || typeof rawMembers !== "object" || Array.isArray(rawMembers)) {
+      return {};
+    }
+    return Object.entries(rawMembers).reduce((acc, [uid, value]) => {
+      if (typeof uid === "string" && uid && uid !== "__proto__") {
+        acc[uid] = normalizeShareRole(value);
+      }
+      return acc;
+    }, {});
+  }
+
+  function normalizeShareProfile(userId, data = {}, fallback = {}) {
+    const rawPseudo = typeof data?.pseudo === "string" ? data.pseudo.trim() : "";
+    const rawEmail = typeof data?.email === "string" ? data.email.trim() : "";
+    const fallbackPseudo = typeof fallback?.pseudo === "string" ? fallback.pseudo.trim() : "";
+    const fallbackEmail = typeof fallback?.email === "string" ? fallback.email.trim() : "";
+    const fallbackDisplay = typeof fallback?.displayName === "string" ? fallback.displayName.trim() : "";
+    const pseudo = rawPseudo || fallbackPseudo;
+    const email = rawEmail || fallbackEmail;
+    const displayName = fallbackDisplay || pseudo || email || userId;
+    return { uid: userId, pseudo, email, displayName };
+  }
+
+  function createShareState(options = {}) {
+    const { keepCache = false, previous = null } = options;
+    const cacheSource =
+      keepCache && previous && previous.profileCache instanceof Map
+        ? previous.profileCache
+        : new Map();
+    return {
+      isOpen: false,
+      editable: false,
+      ownerUid: null,
+      members: new Map(),
+      pendingChanges: false,
+      isLoadingMembers: false,
+      isSearching: false,
+      searchTerm: "",
+      searchResults: [],
+      searchError: "",
+      errorMessage: "",
+      isSaving: false,
+      profileCache: cacheSource,
+      searchDebounce: null,
+      lastFocusedElement: null,
+    };
+  }
+
 
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
@@ -180,6 +253,7 @@ function bootstrapApp() {
     isRevisionMode: false,
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
+    share: createShareState(),
   };
 
   const imageResizeState = {
@@ -243,6 +317,21 @@ function bootstrapApp() {
     desktopFormattingSlot: document.querySelector("[data-desktop-formatting-slot]"),
     revisionModeToggle: document.getElementById("revision-mode-toggle"),
     revisionIterationBtn: document.getElementById("revision-iteration-btn"),
+    shareButton: document.getElementById("share-note-btn"),
+    shareDialog: document.getElementById("share-dialog"),
+    shareDialogClose: document.getElementById("share-dialog-close"),
+    shareDialogBackdrop: document.getElementById("share-dialog-backdrop"),
+    shareForm: document.getElementById("share-form"),
+    shareMembersList: document.getElementById("share-members-list"),
+    shareMembersEmpty: document.getElementById("share-members-empty"),
+    shareRestriction: document.getElementById("share-restriction"),
+    shareSearchInput: document.getElementById("share-search-input"),
+    shareSearchResults: document.getElementById("share-search-results"),
+    shareSearchStatus: document.getElementById("share-search-status"),
+    shareSearchEmpty: document.getElementById("share-search-empty"),
+    shareDialogError: document.getElementById("share-dialog-error"),
+    shareSaveBtn: document.getElementById("share-dialog-save"),
+    shareCancelBtn: document.getElementById("share-dialog-cancel"),
   };
 
   if (ui.mobileAddNoteBtn && ui.addNoteBtn) {
@@ -531,6 +620,703 @@ function bootstrapApp() {
     }, 2600);
   }
 
+  function updateShareButtonState() {
+    if (!ui.shareButton) {
+      return;
+    }
+    const hasNote = Boolean(state.currentNoteId && state.currentNote);
+    const ownerUid = hasNote
+      ? (typeof state.currentNote.ownerUid === "string" && state.currentNote.ownerUid.trim())
+        || state.userId
+        || null
+      : null;
+    const isOwner = Boolean(hasNote && ownerUid && ownerUid === state.userId);
+    ui.shareButton.disabled = !hasNote;
+    ui.shareButton.classList.toggle("share-button-readonly", Boolean(hasNote && !isOwner));
+    const title = !hasNote
+      ? "Ouvrez une fiche pour partager."
+      : isOwner
+        ? "Partager cette fiche"
+        : "Seul le propriétaire peut modifier le partage.";
+    ui.shareButton.setAttribute("title", title);
+    ui.shareButton.setAttribute("aria-label", hasNote ? "Partager cette fiche" : "Partager indisponible");
+    ui.shareButton.setAttribute("aria-expanded", state.share.isOpen ? "true" : "false");
+  }
+
+  function resetShareState(options = {}) {
+    const { keepCache = true } = options;
+    const previous = state.share;
+    state.share = createShareState({ keepCache, previous });
+    return previous;
+  }
+
+  function getCachedShareProfile(uid, fallback = {}) {
+    if (!uid) {
+      return null;
+    }
+    if (!(state.share.profileCache instanceof Map)) {
+      state.share.profileCache = new Map();
+    }
+    const existing = state.share.profileCache.get(uid);
+    if (existing) {
+      const merged = normalizeShareProfile(uid, existing, fallback);
+      state.share.profileCache.set(uid, merged);
+      return merged;
+    }
+    const normalized = normalizeShareProfile(uid, {}, fallback);
+    state.share.profileCache.set(uid, normalized);
+    return normalized;
+  }
+
+  async function ensureShareProfile(uid, fallback = {}) {
+    if (!uid) {
+      return null;
+    }
+    if (!(state.share.profileCache instanceof Map)) {
+      state.share.profileCache = new Map();
+    }
+    let data = null;
+    try {
+      const profileSnap = await getDoc(doc(db, "profiles", uid));
+      if (profileSnap.exists()) {
+        data = profileSnap.data() || {};
+      }
+    } catch (error) {
+      console.warn("Impossible de charger le profil", error);
+    }
+    const existing = state.share.profileCache.get(uid) || {};
+    const normalized = normalizeShareProfile(uid, data || existing, fallback);
+    state.share.profileCache.set(uid, normalized);
+    return normalized;
+  }
+
+  function getShareProfileMeta(profile) {
+    if (!profile) {
+      return "";
+    }
+    if (profile.email && profile.email !== profile.displayName) {
+      return profile.email;
+    }
+    if (profile.pseudo && profile.pseudo !== profile.displayName) {
+      return profile.pseudo;
+    }
+    return "";
+  }
+
+  function createOwnerListItem(profile) {
+    const item = document.createElement("li");
+    item.className = "share-member";
+    item.dataset.memberId = profile?.uid || "";
+
+    const info = document.createElement("div");
+    info.className = "share-member__info";
+    const name = document.createElement("span");
+    name.className = "share-member__name";
+    name.textContent = profile?.displayName || profile?.uid || "Utilisateur";
+    info.appendChild(name);
+    const metaText = getShareProfileMeta(profile);
+    if (metaText) {
+      const meta = document.createElement("span");
+      meta.className = "share-member__meta";
+      meta.textContent = metaText;
+      info.appendChild(meta);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "share-member__actions";
+    const badge = document.createElement("span");
+    badge.className = "share-owner-badge";
+    badge.textContent = "Propriétaire";
+    actions.appendChild(badge);
+
+    item.appendChild(info);
+    item.appendChild(actions);
+    return item;
+  }
+
+  function createMemberListItem(profile, role, options = {}) {
+    const { editable = false, disableControls = false } = options;
+    const resolved = profile || { uid: "", displayName: "Utilisateur" };
+    const item = document.createElement("li");
+    item.className = "share-member";
+    item.dataset.memberId = resolved.uid;
+
+    const info = document.createElement("div");
+    info.className = "share-member__info";
+    const name = document.createElement("span");
+    name.className = "share-member__name";
+    name.textContent = resolved.displayName || resolved.uid || "Utilisateur";
+    info.appendChild(name);
+    const metaText = getShareProfileMeta(resolved);
+    if (metaText) {
+      const meta = document.createElement("span");
+      meta.className = "share-member__meta";
+      meta.textContent = metaText;
+      info.appendChild(meta);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "share-member__actions";
+    const roleContainer = document.createElement("div");
+    roleContainer.className = "share-member__role";
+    const label = document.createElement("label");
+    label.className = "sr-only";
+    const safeUid = typeof resolved.uid === "string" ? resolved.uid.replace(/[^a-zA-Z0-9_-]/g, "-") : "member";
+    const selectId = `share-role-${safeUid}`;
+    label.setAttribute("for", selectId);
+    label.textContent = `Rôle pour ${resolved.displayName || resolved.uid}`;
+    const select = document.createElement("select");
+    select.id = selectId;
+    select.dataset.memberId = resolved.uid;
+    select.dataset.shareRoleSelect = "1";
+    [SHARE_ROLE_VIEWER, SHARE_ROLE_EDITOR].forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = SHARE_ROLE_LABELS[value] || value;
+      select.appendChild(option);
+    });
+    select.value = normalizeShareRole(role);
+    select.disabled = !editable || disableControls;
+    roleContainer.appendChild(label);
+    roleContainer.appendChild(select);
+    actions.appendChild(roleContainer);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "share-remove-btn";
+    removeBtn.textContent = "Retirer";
+    removeBtn.dataset.memberId = resolved.uid;
+    removeBtn.dataset.shareAction = "remove";
+    removeBtn.disabled = !editable || disableControls;
+    removeBtn.setAttribute(
+      "aria-label",
+      `Retirer ${resolved.displayName || resolved.uid} de la liste des membres`
+    );
+    actions.appendChild(removeBtn);
+
+    item.appendChild(info);
+    item.appendChild(actions);
+    return item;
+  }
+
+  function renderShareDialog() {
+    updateShareButtonState();
+    if (!ui.shareDialog || !ui.shareDialogBackdrop) {
+      return;
+    }
+    const share = state.share;
+    const isOpen = Boolean(share?.isOpen);
+
+    if (!isOpen) {
+      ui.shareDialog.classList.add("hidden");
+      ui.shareDialogBackdrop.classList.add("hidden");
+      ui.shareDialog.setAttribute("aria-hidden", "true");
+      ui.shareDialogBackdrop.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("share-dialog-open");
+      if (ui.shareDialogError) {
+        ui.shareDialogError.textContent = "";
+        ui.shareDialogError.classList.add("hidden");
+      }
+      if (ui.shareSearchStatus) {
+        ui.shareSearchStatus.textContent = "";
+      }
+      if (ui.shareSearchResults) {
+        ui.shareSearchResults.innerHTML = "";
+      }
+      if (ui.shareMembersList) {
+        ui.shareMembersList.innerHTML = "";
+      }
+      if (ui.shareMembersEmpty) {
+        ui.shareMembersEmpty.classList.add("hidden");
+      }
+      if (ui.shareSearchEmpty) {
+        ui.shareSearchEmpty.classList.add("hidden");
+      }
+      if (ui.shareSearchInput && ui.shareSearchInput.value !== "") {
+        ui.shareSearchInput.value = "";
+      }
+      if (ui.shareSaveBtn) {
+        ui.shareSaveBtn.disabled = true;
+        ui.shareSaveBtn.textContent = "Enregistrer";
+      }
+      if (ui.shareCancelBtn) {
+        ui.shareCancelBtn.disabled = false;
+      }
+      return;
+    }
+
+    ui.shareDialog.classList.remove("hidden");
+    ui.shareDialogBackdrop.classList.remove("hidden");
+    ui.shareDialog.setAttribute("aria-hidden", "false");
+    ui.shareDialogBackdrop.setAttribute("aria-hidden", "false");
+    document.body.classList.add("share-dialog-open");
+
+    const editable = Boolean(share.editable);
+    const controlsDisabled = share.isSaving || share.isLoadingMembers;
+
+    if (ui.shareRestriction) {
+      if (!editable) {
+        ui.shareRestriction.textContent = "Seul le propriétaire peut modifier le partage.";
+        ui.shareRestriction.classList.remove("hidden");
+      } else if (share.isLoadingMembers) {
+        ui.shareRestriction.textContent = "Chargement des membres…";
+        ui.shareRestriction.classList.remove("hidden");
+      } else {
+        ui.shareRestriction.textContent = "";
+        ui.shareRestriction.classList.add("hidden");
+      }
+    }
+
+    if (ui.shareDialogError) {
+      if (share.errorMessage) {
+        ui.shareDialogError.textContent = share.errorMessage;
+        ui.shareDialogError.classList.remove("hidden");
+      } else {
+        ui.shareDialogError.textContent = "";
+        ui.shareDialogError.classList.add("hidden");
+      }
+    }
+
+    if (ui.shareSearchInput) {
+      if (ui.shareSearchInput.value !== share.searchTerm) {
+        ui.shareSearchInput.value = share.searchTerm;
+      }
+      ui.shareSearchInput.disabled = !editable || share.isSaving;
+    }
+
+    if (ui.shareSaveBtn) {
+      ui.shareSaveBtn.disabled = !editable || share.isSaving || !share.pendingChanges;
+      ui.shareSaveBtn.textContent = share.isSaving ? "Enregistrement…" : "Enregistrer";
+    }
+
+    if (ui.shareCancelBtn) {
+      ui.shareCancelBtn.disabled = share.isSaving;
+    }
+
+    if (ui.shareMembersList) {
+      ui.shareMembersList.innerHTML = "";
+      const fragment = document.createDocumentFragment();
+      if (share.ownerUid) {
+        const ownerProfile = getCachedShareProfile(share.ownerUid, {
+          displayName: share.ownerUid === state.userId ? state.displayName : "",
+          email: share.ownerUid === state.userId ? state.userEmail : "",
+        });
+        fragment.appendChild(createOwnerListItem(ownerProfile));
+      }
+      share.members.forEach((memberRole, memberId) => {
+        const profile = getCachedShareProfile(memberId) || { uid: memberId, displayName: memberId };
+        fragment.appendChild(
+          createMemberListItem(profile, memberRole, {
+            editable,
+            disableControls: controlsDisabled,
+          })
+        );
+      });
+      ui.shareMembersList.appendChild(fragment);
+    }
+
+    if (ui.shareMembersEmpty) {
+      const showEmpty = share.members.size === 0 && !share.isLoadingMembers;
+      ui.shareMembersEmpty.textContent = "Aucun collaborateur n'a encore été ajouté.";
+      ui.shareMembersEmpty.classList.toggle("hidden", !showEmpty);
+    }
+
+    if (ui.shareSearchResults) {
+      ui.shareSearchResults.innerHTML = "";
+      if (share.searchResults.length > 0) {
+        const fragment = document.createDocumentFragment();
+        share.searchResults.forEach((profile) => {
+          if (!profile || profile.uid === share.ownerUid) {
+            return;
+          }
+          const item = document.createElement("li");
+          item.className = "share-search-item";
+          item.dataset.memberId = profile.uid;
+
+          const info = document.createElement("div");
+          info.className = "share-search-item__info";
+          const name = document.createElement("span");
+          name.className = "share-search-item__name";
+          name.textContent = profile.displayName || profile.uid;
+          info.appendChild(name);
+          const metaText = getShareProfileMeta(profile);
+          if (metaText) {
+            const meta = document.createElement("span");
+            meta.className = "share-search-item__meta";
+            meta.textContent = metaText;
+            info.appendChild(meta);
+          }
+          item.appendChild(info);
+
+          const alreadyMember = share.members.has(profile.uid);
+          if (alreadyMember) {
+            const status = document.createElement("span");
+            status.className = "share-search-item__status";
+            status.textContent = "Déjà ajouté";
+            item.appendChild(status);
+          } else {
+            const addBtn = document.createElement("button");
+            addBtn.type = "button";
+            addBtn.className = "share-search-add secondary";
+            addBtn.textContent = "Ajouter";
+            addBtn.dataset.memberId = profile.uid;
+            addBtn.dataset.shareAction = "add";
+            addBtn.disabled = !editable || share.isSaving;
+            addBtn.setAttribute(
+              "aria-label",
+              `Ajouter ${profile.displayName || profile.uid} en tant que lecteur`
+            );
+            item.appendChild(addBtn);
+          }
+
+          fragment.appendChild(item);
+        });
+        ui.shareSearchResults.appendChild(fragment);
+      }
+    }
+
+    if (ui.shareSearchEmpty) {
+      const shouldShowEmpty =
+        share.searchTerm.trim().length > 0 &&
+        !share.isSearching &&
+        share.searchResults.length === 0 &&
+        !share.searchError;
+      ui.shareSearchEmpty.classList.toggle("hidden", !shouldShowEmpty);
+    }
+
+    if (ui.shareSearchStatus) {
+      let statusMessage = "";
+      if (share.isSearching) {
+        statusMessage = "Recherche en cours…";
+      } else if (share.searchError) {
+        statusMessage = share.searchError;
+      } else if (share.searchTerm.trim()) {
+        statusMessage = `Résultats pour "${share.searchTerm.trim()}"`;
+      }
+      ui.shareSearchStatus.textContent = statusMessage;
+    }
+  }
+
+  function closeShareDialog() {
+    if (!state.share.isOpen) {
+      return;
+    }
+    if (state.share.searchDebounce) {
+      clearTimeout(state.share.searchDebounce);
+      state.share.searchDebounce = null;
+    }
+    const previous = resetShareState({ keepCache: true });
+    renderShareDialog();
+    const focusTarget =
+      previous?.lastFocusedElement instanceof HTMLElement
+        ? previous.lastFocusedElement
+        : ui.shareButton;
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus({ preventScroll: true });
+    }
+  }
+
+  async function openShareDialog() {
+    if (!ui.shareButton || ui.shareButton.disabled || !state.currentNoteId || !state.currentNote) {
+      return;
+    }
+    if (state.share.isOpen) {
+      return;
+    }
+    try {
+      await flushPendingSave();
+    } catch (error) {
+      console.warn("Impossible de synchroniser la fiche avant l'ouverture du partage", error);
+    }
+
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : ui.shareButton;
+    const nextShareState = createShareState({ keepCache: true, previous: state.share });
+    const ownerUid =
+      (typeof state.currentNote.ownerUid === "string" && state.currentNote.ownerUid.trim()) || state.userId;
+    nextShareState.isOpen = true;
+    nextShareState.lastFocusedElement = previousFocus;
+    nextShareState.ownerUid = ownerUid || null;
+    nextShareState.editable = Boolean(!ownerUid || ownerUid === state.userId);
+    nextShareState.members = new Map(
+      Object.entries(sanitizeMembersRecord(state.currentNote.members)).filter(([uid]) => uid !== ownerUid)
+    );
+    nextShareState.errorMessage = "";
+    nextShareState.pendingChanges = false;
+    nextShareState.isLoadingMembers = true;
+    state.share = nextShareState;
+
+    const ownerFallback = {
+      displayName: ownerUid === state.userId ? state.displayName : "",
+      email: ownerUid === state.userId ? state.userEmail : "",
+    };
+    getCachedShareProfile(ownerUid, ownerFallback);
+
+    renderShareDialog();
+
+    const memberIds = Array.from(nextShareState.members.keys());
+    try {
+      await Promise.all([
+        ensureShareProfile(ownerUid, ownerFallback),
+        ...memberIds.map((uid) => ensureShareProfile(uid)),
+      ]);
+    } finally {
+      if (!state.share.isOpen || state.share !== nextShareState) {
+        return;
+      }
+      nextShareState.isLoadingMembers = false;
+      renderShareDialog();
+      const focusTarget =
+        nextShareState.editable && ui.shareSearchInput ? ui.shareSearchInput : ui.shareDialogClose;
+      if (focusTarget) {
+        setTimeout(() => {
+          if (state.share.isOpen) {
+            focusTarget.focus({ preventScroll: true });
+          }
+        }, 60);
+      }
+    }
+  }
+
+  function handleShareSearchInput(event) {
+    if (!state.share.isOpen || !state.share.editable || state.share.isSaving) {
+      return;
+    }
+    const value = typeof event.target.value === "string" ? event.target.value : "";
+    state.share.searchTerm = value;
+    state.share.searchError = "";
+    if (state.share.searchDebounce) {
+      clearTimeout(state.share.searchDebounce);
+      state.share.searchDebounce = null;
+    }
+    if (!value.trim()) {
+      state.share.searchResults = [];
+      renderShareDialog();
+      return;
+    }
+    state.share.searchDebounce = setTimeout(() => {
+      state.share.searchDebounce = null;
+      performShareSearch(value.trim());
+    }, SHARE_SEARCH_DEBOUNCE_MS);
+    renderShareDialog();
+  }
+
+  async function performShareSearch(term) {
+    const share = state.share;
+    const currentTerm = term.trim();
+    if (!share.isOpen || !share.editable || !currentTerm) {
+      share.searchResults = [];
+      share.searchError = "";
+      share.isSearching = false;
+      renderShareDialog();
+      return;
+    }
+    const ownerUid = share.ownerUid;
+    const profilesRef = collection(db, "profiles");
+    const lowerTerm = currentTerm.toLowerCase();
+    share.isSearching = true;
+    share.searchError = "";
+    renderShareDialog();
+
+    const resultsMap = new Map();
+    try {
+      if (currentTerm.includes("@")) {
+        try {
+          const emailQuery = query(profilesRef, where("email", "==", currentTerm));
+          const emailSnap = await getDocs(emailQuery);
+          emailSnap.forEach((docSnap) => {
+            resultsMap.set(docSnap.id, docSnap.data() || {});
+          });
+        } catch (error) {
+          console.warn("Recherche exacte par e-mail impossible", error);
+        }
+      }
+
+      try {
+        const pseudoQuery = query(
+          profilesRef,
+          orderBy("pseudo"),
+          startAt(currentTerm),
+          endAt(`${currentTerm}\uf8ff`),
+          limit(10)
+        );
+        const pseudoSnap = await getDocs(pseudoQuery);
+        pseudoSnap.forEach((docSnap) => {
+          resultsMap.set(docSnap.id, docSnap.data() || {});
+        });
+      } catch (error) {
+        console.warn("Recherche par pseudo préfixe impossible, tentative d'alternative", error);
+        try {
+          const fallbackSnap = await getDocs(query(profilesRef, limit(20)));
+          fallbackSnap.forEach((docSnap) => {
+            const data = docSnap.data() || {};
+            const pseudo = typeof data.pseudo === "string" ? data.pseudo.toLowerCase() : "";
+            const email = typeof data.email === "string" ? data.email.toLowerCase() : "";
+            if ((pseudo && pseudo.includes(lowerTerm)) || (email && email.includes(lowerTerm))) {
+              resultsMap.set(docSnap.id, data);
+            }
+          });
+        } catch (fallbackError) {
+          console.warn("Recherche de secours impossible", fallbackError);
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de la recherche de profils", error);
+      share.searchError = "Recherche impossible pour le moment. Veuillez réessayer.";
+    }
+
+    share.isSearching = false;
+    if (share.searchTerm.trim() !== currentTerm) {
+      renderShareDialog();
+      return;
+    }
+
+    const formatted = Array.from(resultsMap.entries()).reduce((acc, [uid, data]) => {
+      if (uid === ownerUid) {
+        return acc;
+      }
+      const normalized = normalizeShareProfile(uid, data);
+      state.share.profileCache.set(uid, normalized);
+      acc.push(normalized);
+      return acc;
+    }, []);
+    formatted.sort((a, b) => a.displayName.localeCompare(b.displayName, "fr", { sensitivity: "base" }));
+    share.searchResults = formatted;
+    renderShareDialog();
+  }
+
+  function handleShareAdd(memberId) {
+    if (!state.share.isOpen || !state.share.editable || state.share.isSaving) {
+      return;
+    }
+    if (!memberId || memberId === state.share.ownerUid) {
+      return;
+    }
+    if (!state.share.members) {
+      state.share.members = new Map();
+    }
+    if (state.share.members.has(memberId)) {
+      return;
+    }
+    state.share.members.set(memberId, SHARE_ROLE_VIEWER);
+    state.share.pendingChanges = true;
+    state.share.errorMessage = "";
+    state.share.searchResults = state.share.searchResults.filter((profile) => profile.uid !== memberId);
+    renderShareDialog();
+  }
+
+  function handleShareRemove(memberId) {
+    if (!state.share.isOpen || !state.share.editable || state.share.isSaving) {
+      return;
+    }
+    if (!memberId || !state.share.members?.has(memberId)) {
+      return;
+    }
+    state.share.members.delete(memberId);
+    state.share.pendingChanges = true;
+    state.share.errorMessage = "";
+    renderShareDialog();
+  }
+
+  function handleShareDialogClick(event) {
+    if (!state.share.isOpen) {
+      return;
+    }
+    const removeBtn = closestElement(event.target, '[data-share-action="remove"]');
+    if (removeBtn) {
+      event.preventDefault();
+      handleShareRemove(removeBtn.dataset.memberId || "");
+      return;
+    }
+    const addBtn = closestElement(event.target, '[data-share-action="add"]');
+    if (addBtn) {
+      event.preventDefault();
+      handleShareAdd(addBtn.dataset.memberId || "");
+    }
+  }
+
+  function handleShareDialogChange(event) {
+    if (!state.share.isOpen || !state.share.editable || state.share.isSaving) {
+      return;
+    }
+    const select = closestElement(event.target, "[data-share-role-select]");
+    if (!select || !(select instanceof HTMLSelectElement)) {
+      return;
+    }
+    const memberId = select.dataset.memberId || "";
+    if (!memberId || !state.share.members?.has(memberId)) {
+      return;
+    }
+    const nextRole = normalizeShareRole(select.value);
+    state.share.members.set(memberId, nextRole);
+    state.share.pendingChanges = true;
+    state.share.errorMessage = "";
+    renderShareDialog();
+  }
+
+  async function saveShareChanges(event) {
+    event.preventDefault();
+    if (!state.share.isOpen) {
+      return;
+    }
+    if (!state.share.editable) {
+      closeShareDialog();
+      return;
+    }
+    if (!state.share.pendingChanges) {
+      closeShareDialog();
+      return;
+    }
+    if (!state.userId || !state.currentNoteId) {
+      state.share.errorMessage = "Aucune fiche active sélectionnée.";
+      renderShareDialog();
+      return;
+    }
+    state.share.isSaving = true;
+    state.share.errorMessage = "";
+    renderShareDialog();
+    try {
+      await flushPendingSave();
+    } catch (error) {
+      console.warn("Impossible de synchroniser la fiche avant l'enregistrement du partage", error);
+    }
+
+    const membersPayload = {};
+    state.share.members.forEach((memberRole, memberId) => {
+      membersPayload[memberId] = normalizeShareRole(memberRole);
+    });
+
+    try {
+      const noteRef = doc(db, "users", state.userId, "notes", state.currentNoteId);
+      await updateDoc(noteRef, {
+        members: membersPayload,
+        updatedAt: serverTimestamp(),
+      });
+      const now = new Date();
+      state.currentNote.members = { ...membersPayload };
+      state.currentNote.updatedAt = now;
+      state.lastSavedAt = now;
+      updateLocalNoteCache(state.currentNoteId, {
+        members: { ...membersPayload },
+        updatedAt: now,
+      });
+      state.share.pendingChanges = false;
+      state.share.isSaving = false;
+      showToast("Partage mis à jour", "success");
+      closeShareDialog();
+    } catch (error) {
+      state.share.isSaving = false;
+      if (isPermissionDenied(error)) {
+        reportPermissionIssue("Modification du partage refusée par Firestore");
+        state.share.errorMessage = "Vous n'avez pas la permission de modifier le partage de cette fiche.";
+      } else {
+        console.error("Impossible d'enregistrer les modifications de partage", error);
+        state.share.errorMessage = "Impossible d'enregistrer les modifications de partage.";
+      }
+      renderShareDialog();
+    }
+  }
+
   function setupLayoutControls() {
     setSidebarCollapsed(false);
 
@@ -566,6 +1352,10 @@ function bootstrapApp() {
       }
       if (ui.toolbarMorePanel && ui.toolbarMorePanel.classList.contains("is-open")) {
         setToolbarMoreMenu(false);
+        return;
+      }
+      if (state.share.isOpen) {
+        closeShareDialog();
         return;
       }
       if (ui.headerMenu && ui.headerMenu.classList.contains("open")) {
@@ -1204,6 +1994,7 @@ function bootstrapApp() {
     }
     updateFontSizeDisplay();
     updateSaveStatus();
+    updateShareButtonState();
   }
 
   function applyCurrentNoteToEditor(options = {}) {
@@ -1250,6 +2041,20 @@ function bootstrapApp() {
       rememberEditorSelection();
     } else {
       state.savedSelection = null;
+    }
+    if (state.share.isOpen && !state.share.pendingChanges) {
+      const ownerUid =
+        (typeof state.currentNote.ownerUid === "string" && state.currentNote.ownerUid.trim()) || state.userId;
+      state.share.ownerUid = ownerUid || null;
+      state.share.editable = Boolean(!ownerUid || ownerUid === state.userId);
+      const nextMembers = sanitizeMembersRecord(state.currentNote.members);
+      state.share.members = new Map(
+        Object.entries(nextMembers).filter(([uid]) => uid !== ownerUid)
+      );
+      state.share.errorMessage = "";
+      renderShareDialog();
+    } else {
+      updateShareButtonState();
     }
   }
 
@@ -1562,16 +2367,7 @@ function bootstrapApp() {
         typeof data.ownerUid === "string" && data.ownerUid.trim() !== ""
           ? data.ownerUid.trim()
           : null;
-      const rawMembers = data.members;
-      let members = {};
-      if (rawMembers && typeof rawMembers === "object" && !Array.isArray(rawMembers)) {
-        members = Object.entries(rawMembers).reduce((acc, [key, value]) => {
-          if (typeof key === "string" && key !== "__proto__") {
-            acc[key] = value;
-          }
-          return acc;
-        }, {});
-      }
+      const members = sanitizeMembersRecord(data.members);
       const published =
         typeof data.published === "boolean"
           ? data.published
@@ -1666,6 +2462,9 @@ function bootstrapApp() {
     const { skipFlush = false } = options;
     if (!skipFlush) {
       await flushPendingSave();
+    }
+    if (state.share.isOpen) {
+      closeShareDialog();
     }
     state.currentNoteId = note.id;
     state.currentNote = sanitizeNoteForEditing(note);
@@ -3104,6 +3903,7 @@ function bootstrapApp() {
       clearTimeout(state.pendingSave);
       state.pendingSave = null;
     }
+    resetShareState({ keepCache: false });
     state.userId = null;
     state.userEmail = null;
     state.displayName = null;
@@ -3120,6 +3920,7 @@ function bootstrapApp() {
     state.isEditorFocused = false;
     ui.notesContainer.innerHTML = "";
     showEmptyEditor();
+    renderShareDialog();
     ui.currentUser.textContent = "";
     ui.logoutBtn.disabled = true;
   }
@@ -3288,6 +4089,36 @@ function bootstrapApp() {
         }
       });
     }
+    if (ui.shareButton) {
+      ui.shareButton.addEventListener("click", () => {
+        Promise.resolve(openShareDialog()).catch((error) => {
+          console.error("Impossible d'ouvrir le partage", error);
+          showToast("Impossible d'ouvrir le partage", "error");
+        });
+      });
+    }
+    if (ui.shareDialogClose) {
+      ui.shareDialogClose.addEventListener("click", () => closeShareDialog());
+    }
+    if (ui.shareDialogBackdrop) {
+      ui.shareDialogBackdrop.addEventListener("click", () => closeShareDialog());
+    }
+    if (ui.shareCancelBtn) {
+      ui.shareCancelBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeShareDialog();
+      });
+    }
+    if (ui.shareForm) {
+      ui.shareForm.addEventListener("submit", saveShareChanges);
+    }
+    if (ui.shareDialog) {
+      ui.shareDialog.addEventListener("click", handleShareDialogClick);
+      ui.shareDialog.addEventListener("change", handleShareDialogChange);
+    }
+    if (ui.shareSearchInput) {
+      ui.shareSearchInput.addEventListener("input", handleShareSearchInput);
+    }
     document.addEventListener("click", handleDocumentClick);
     document.addEventListener("selectionchange", handleSelectionChange);
     window.addEventListener("pointermove", handleImageHandlePointerMove);
@@ -3304,6 +4135,7 @@ function bootstrapApp() {
 
   showAuthView(state.activeAuthView);
   initEvents();
+  updateShareButtonState();
   updateToolbarFormattingLayout();
   if (typeof mobileMediaQuery.addEventListener === "function") {
     mobileMediaQuery.addEventListener("change", updateToolbarFormattingLayout);
