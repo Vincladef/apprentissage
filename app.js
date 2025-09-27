@@ -223,8 +223,6 @@ function bootstrapApp() {
 
   const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "short",
     hour: "2-digit",
     minute: "2-digit"
   });
@@ -1635,7 +1633,7 @@ function bootstrapApp() {
         ui.saveStatus.textContent = "Enregistrement...";
         break;
       case "saved":
-        ui.saveStatus.textContent = date ? `Enregistré le ${dateFormatter.format(date)}` : "Enregistré";
+        ui.saveStatus.textContent = date ? `Enregistré à ${dateFormatter.format(date)}` : "Enregistré";
         break;
       case "error":
         ui.saveStatus.textContent = "Erreur d'enregistrement";
