@@ -102,6 +102,28 @@ function bootstrapApp() {
   const DEFAULT_FONT_FAMILY = "Arial";
   const FONT_SIZE_STEPS = [10, 11, 12, 14, 18, 24, 32];
   const DEFAULT_FONT_SIZE_INDEX = 1;
+  const TEXT_COLOR_PRESETS = [
+    { value: "#0f172a", label: "Bleu nuit" },
+    { value: "#1f2937", label: "Gris anthracite" },
+    { value: "#374151", label: "Ardoise" },
+    { value: "#4b5563", label: "Gris acier" },
+    { value: "#6b7280", label: "Gris moyen" },
+    { value: "#9ca3af", label: "Gris clair" },
+    { value: "#ef4444", label: "Rouge vif" },
+    { value: "#f97316", label: "Orange" },
+    { value: "#f59e0b", label: "Ambre" },
+    { value: "#facc15", label: "Jaune" },
+    { value: "#22c55e", label: "Vert" },
+    { value: "#16a34a", label: "Vert forêt" },
+    { value: "#0ea5e9", label: "Bleu ciel" },
+    { value: "#2563eb", label: "Bleu roi" },
+    { value: "#1d4ed8", label: "Bleu profond" },
+    { value: "#7c3aed", label: "Violet" },
+    { value: "#ec4899", label: "Rose" },
+    { value: "#f43f5e", label: "Framboise" },
+    { value: "#14b8a6", label: "Turquoise" },
+    { value: "#10b981", label: "Émeraude" },
+  ];
   const IMAGE_RESIZE_MIN_WIDTH = 80;
   const IMAGE_RESIZE_MIN_HEIGHT = 80;
   const IMAGE_RESIZE_KEYBOARD_STEP = 10;
@@ -247,6 +269,8 @@ function bootstrapApp() {
     hasUnsavedChanges: false,
     lastSavedAt: null,
     fontSizeIndex: DEFAULT_FONT_SIZE_INDEX,
+    textColor: DEFAULT_TEXT_COLOR,
+    isTextColorPopoverOpen: false,
     activeCloze: null,
     pendingRemoteNote: null,
     isEditorFocused: false,
@@ -321,6 +345,10 @@ function bootstrapApp() {
     emptyState: document.getElementById("empty-note"),
     toast: document.getElementById("toast"),
     toolbar: document.querySelector(".editor-toolbar"),
+    textColorButton: document.querySelector('button[data-action="applyTextColor"]'),
+    textColorPopover: document.getElementById("text-color-popover"),
+    textColorOptions: document.getElementById("text-color-options"),
+    textColorCustomInput: document.getElementById("text-color-custom-input"),
     blockFormat: document.getElementById("block-format"),
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
@@ -473,6 +501,7 @@ function bootstrapApp() {
       showToast("Ouvrez une fiche pour activer le mode révision.", "info");
     }
     state.isRevisionMode = shouldEnable;
+    setTextColorPopover(false);
 
     if (bodyElement) {
       bodyElement.classList.toggle("revision-mode", shouldEnable);
@@ -619,6 +648,7 @@ function bootstrapApp() {
   }
 
   function showView(name) {
+    setTextColorPopover(false);
     Object.entries(views).forEach(([key, section]) => {
       if (!section) return;
       section.classList.toggle("active", key === name);
@@ -1384,6 +1414,10 @@ function bootstrapApp() {
 
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
+      if (isTextColorPopoverOpen()) {
+        setTextColorPopover(false);
+        return;
+      }
       if (document.body.classList.contains("notes-drawer-open")) {
         setNotesDrawer(false);
         return;
@@ -1485,6 +1519,7 @@ function bootstrapApp() {
 
   function setToolbarMoreMenu(open) {
     if (!ui.toolbarMoreBtn || !ui.toolbarMorePanel) return;
+    setTextColorPopover(false);
     if (!mobileMediaQuery.matches) {
       ui.toolbarMorePanel.classList.remove("is-open");
       ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
@@ -3140,6 +3175,7 @@ function bootstrapApp() {
   async function openNote(note, options = {}) {
     if (!note) return;
     const { skipFlush = false } = options;
+    setTextColorPopover(false);
     if (!skipFlush) {
       await flushPendingSave();
     }
@@ -4026,12 +4062,209 @@ function bootstrapApp() {
     updateFontSizeDisplay();
   }
 
+  function normalizeHexColor(color) {
+    if (typeof color !== "string") {
+      return "";
+    }
+    const trimmed = color.trim();
+    if (!trimmed) {
+      return "";
+    }
+    const sixDigit = /^#([0-9a-fA-F]{6})$/.exec(trimmed);
+    if (sixDigit) {
+      return `#${sixDigit[1].toLowerCase()}`;
+    }
+    const shortHex = /^#([0-9a-fA-F]{3})$/.exec(trimmed);
+    if (shortHex) {
+      const [r, g, b] = shortHex[1].toLowerCase().split("");
+      return `#${r}${r}${g}${g}${b}${b}`;
+    }
+    return trimmed;
+  }
+
+  function formatColorForInput(color) {
+    const normalized = normalizeHexColor(color);
+    if (/^#[0-9a-f]{6}$/.test(normalized)) {
+      return normalized;
+    }
+    return "";
+  }
+
+  function getTextColorLabel(color) {
+    const normalized = normalizeHexColor(color);
+    const preset = TEXT_COLOR_PRESETS.find(
+      (entry) => normalizeHexColor(entry.value) === normalized
+    );
+    if (preset && preset.label) {
+      return preset.label;
+    }
+    if (/^#[0-9a-f]{6}$/.test(normalized)) {
+      return normalized.toUpperCase();
+    }
+    const fallback = TEXT_COLOR_PRESETS.find(
+      (entry) => normalizeHexColor(entry.value) === normalizeHexColor(DEFAULT_TEXT_COLOR)
+    );
+    return fallback?.label || DEFAULT_TEXT_COLOR.toUpperCase();
+  }
+
+  function updateTextColorSelection(color) {
+    if (!ui.textColorOptions) return;
+    const normalized = normalizeHexColor(color);
+    const swatches = ui.textColorOptions.querySelectorAll(".color-swatch");
+    swatches.forEach((swatch) => {
+      const swatchColor = normalizeHexColor(swatch.dataset.color);
+      const isSelected = Boolean(swatchColor && swatchColor === normalized);
+      swatch.classList.toggle("is-selected", isSelected);
+      swatch.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    });
+  }
+
+  function updateTextColorState(color) {
+    const normalized = normalizeHexColor(color);
+    const resolved = /^#[0-9a-f]{6}$/.test(normalized) ? normalized : DEFAULT_TEXT_COLOR;
+    state.textColor = resolved;
+    if (ui.textColorButton) {
+      ui.textColorButton.dataset.value = resolved;
+      const colorBar = ui.textColorButton.querySelector(".color-bar");
+      if (colorBar) {
+        colorBar.style.background = resolved;
+      }
+      const label = getTextColorLabel(resolved);
+      const srLabel = ui.textColorButton.querySelector(".sr-only");
+      if (srLabel) {
+        srLabel.textContent = `Appliquer la couleur du texte (${label})`;
+      }
+      ui.textColorButton.setAttribute("title", `Couleur du texte (${label})`);
+    }
+    if (ui.textColorCustomInput) {
+      const formatted = formatColorForInput(resolved);
+      if (formatted) {
+        ui.textColorCustomInput.value = formatted;
+      }
+    }
+    updateTextColorSelection(resolved);
+  }
+
+  function renderTextColorOptions() {
+    if (!ui.textColorOptions) return;
+    ui.textColorOptions.innerHTML = "";
+    TEXT_COLOR_PRESETS.forEach(({ value, label }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "color-swatch";
+      const normalized = normalizeHexColor(value);
+      button.dataset.color = normalized;
+      button.style.setProperty("--swatch-color", normalized);
+      const accessibleLabel = label || normalized.toUpperCase();
+      button.setAttribute("aria-label", accessibleLabel);
+      button.setAttribute("title", accessibleLabel);
+      button.setAttribute("aria-pressed", "false");
+      ui.textColorOptions.appendChild(button);
+    });
+    updateTextColorSelection(state.textColor);
+  }
+
+  function isTextColorPopoverOpen() {
+    return Boolean(state.isTextColorPopoverOpen);
+  }
+
+  function setTextColorPopover(open) {
+    const shouldOpen = Boolean(open);
+    if (!ui.textColorPopover || !ui.textColorButton) {
+      state.isTextColorPopoverOpen = false;
+      return;
+    }
+    if (shouldOpen === state.isTextColorPopoverOpen) {
+      if (shouldOpen && ui.textColorCustomInput) {
+        const formatted = formatColorForInput(state.textColor);
+        if (formatted) {
+          ui.textColorCustomInput.value = formatted;
+        }
+      }
+      return;
+    }
+    state.isTextColorPopoverOpen = shouldOpen;
+    if (shouldOpen) {
+      ui.textColorPopover.classList.add("is-open");
+      ui.textColorPopover.removeAttribute("hidden");
+      ui.textColorPopover.setAttribute("aria-hidden", "false");
+      ui.textColorButton.setAttribute("aria-expanded", "true");
+      if (ui.textColorCustomInput) {
+        const formatted = formatColorForInput(state.textColor);
+        if (formatted) {
+          ui.textColorCustomInput.value = formatted;
+        }
+      }
+      requestAnimationFrame(() => {
+        const preferred =
+          ui.textColorOptions?.querySelector(".color-swatch.is-selected") ??
+          ui.textColorOptions?.querySelector(".color-swatch");
+        if (preferred) {
+          preferred.focus({ preventScroll: true });
+        }
+      });
+    } else {
+      ui.textColorPopover.classList.remove("is-open");
+      ui.textColorPopover.setAttribute("aria-hidden", "true");
+      ui.textColorPopover.setAttribute("hidden", "");
+      ui.textColorButton.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function toggleTextColorPopover(forceOpen) {
+    if (!ui.textColorPopover || !ui.textColorButton) {
+      state.isTextColorPopoverOpen = false;
+      return;
+    }
+    const shouldOpen =
+      typeof forceOpen === "boolean" ? forceOpen : !state.isTextColorPopoverOpen;
+    setTextColorPopover(shouldOpen);
+  }
+
+  function handleTextColorPopoverClick(event) {
+    if (!state.currentNote) {
+      return;
+    }
+    const swatch = closestElement(event.target, "button[data-color]");
+    if (!swatch) {
+      return;
+    }
+    event.preventDefault();
+    const value = swatch.dataset.color;
+    if (!value) {
+      return;
+    }
+    applyTextColor(value);
+    setTextColorPopover(false);
+  }
+
+  function handleTextColorCustomInput(event) {
+    if (!state.currentNote) {
+      return;
+    }
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    if (!input || !input.value) {
+      return;
+    }
+    applyTextColor(input.value);
+  }
+
+  function handleTextColorCustomInputCommit(event) {
+    handleTextColorCustomInput(event);
+    setTextColorPopover(false);
+  }
+
   function applyTextColor(color) {
-    const value = typeof color === "string" && color.trim() ? color : DEFAULT_TEXT_COLOR;
+    if (!state.currentNote) {
+      return;
+    }
+    const normalized = normalizeHexColor(color);
+    const value = /^#[0-9a-f]{6}$/.test(normalized) ? normalized : DEFAULT_TEXT_COLOR;
     runWithPreservedSelection(() => {
       document.execCommand("foreColor", false, value);
       handleEditorInput();
     });
+    updateTextColorState(value);
   }
 
   function clearActiveCloze() {
@@ -4148,13 +4381,24 @@ function bootstrapApp() {
   }
 
   function handleDocumentClick(event) {
+    const targetNode = event.target instanceof Node ? event.target : null;
+    const targetElement = event.target instanceof Element ? event.target : null;
+
+    if (isTextColorPopoverOpen() && ui.textColorPopover && ui.textColorButton) {
+      const insidePopover = targetNode && ui.textColorPopover.contains(targetNode);
+      const onButton = targetNode && ui.textColorButton.contains(targetNode);
+      if (!insidePopover && !onButton) {
+        setTextColorPopover(false);
+      }
+    }
+
     if (!ui.clozeFeedback || ui.clozeFeedback.classList.contains("hidden")) {
       return;
     }
-    if (ui.clozeFeedback.contains(event.target)) {
+    if (targetNode && ui.clozeFeedback.contains(targetNode)) {
       return;
     }
-    if (closestElement(event.target, ".cloze")) {
+    if (targetElement && closestElement(targetElement, ".cloze")) {
       return;
     }
     hideClozeFeedback();
@@ -4183,6 +4427,9 @@ function bootstrapApp() {
     if (!button || !state.currentNote) return;
     const command = button.dataset.command;
     const action = button.dataset.action;
+    if (command || (action && action !== "applyTextColor")) {
+      setTextColorPopover(false);
+    }
     if (state.isRevisionMode) {
       if (action === "startIteration") {
         event.preventDefault();
@@ -4204,12 +4451,13 @@ function bootstrapApp() {
         handleEditorInput();
       });
     } else if (action) {
-      if (action === "applyHighlight") {
+      if (action === "applyTextColor") {
+        event.preventDefault();
+        handledBySelectionHelper = true;
+        toggleTextColorPopover();
+      } else if (action === "applyHighlight") {
         handledBySelectionHelper = true;
         applyHighlight();
-      } else if (action === "applyTextColor") {
-        handledBySelectionHelper = true;
-        applyTextColor(button.dataset.value);
       } else if (action === "increaseFontSize") {
         handledBySelectionHelper = true;
         adjustFontSize(1);
@@ -4229,6 +4477,7 @@ function bootstrapApp() {
       focusEditorPreservingSelection();
     }
     if (
+      action !== "applyTextColor" &&
       mobileMediaQuery.matches &&
       ui.toolbarMorePanel &&
       ui.toolbarMorePanel.classList.contains("is-open") &&
@@ -4696,6 +4945,25 @@ function bootstrapApp() {
     });
   }
 
+  function initTextColorControls() {
+    if (!ui.textColorButton) {
+      return;
+    }
+    if (ui.textColorOptions) {
+      renderTextColorOptions();
+    }
+    updateTextColorState(state.textColor);
+    state.isTextColorPopoverOpen = false;
+    setTextColorPopover(false);
+    if (ui.textColorPopover) {
+      ui.textColorPopover.addEventListener("click", handleTextColorPopoverClick);
+    }
+    if (ui.textColorCustomInput) {
+      ui.textColorCustomInput.addEventListener("input", handleTextColorCustomInput);
+      ui.textColorCustomInput.addEventListener("change", handleTextColorCustomInputCommit);
+    }
+  }
+
   function initEvents() {
     if (ui.authTabs.length) {
       ui.authTabs.forEach((button) => {
@@ -4750,6 +5018,8 @@ function bootstrapApp() {
     ui.noteEditor.addEventListener("mouseup", rememberEditorSelection);
     ui.noteEditor.addEventListener("touchend", rememberEditorSelection);
     ui.noteEditor.addEventListener("blur", handleEditorBlur);
+    ui.toolbar.addEventListener("mousedown", rememberEditorSelection);
+    ui.toolbar.addEventListener("touchstart", rememberEditorSelection, { passive: true });
     ui.toolbar.addEventListener("click", handleToolbarClick);
     ui.toolbar.addEventListener("change", handleToolbarChange);
     if (ui.toolbarMoreBtn) {
@@ -4816,6 +5086,7 @@ function bootstrapApp() {
     });
   }
 
+  initTextColorControls();
   showAuthView(state.activeAuthView);
   initEvents();
   updateShareButtonState();
