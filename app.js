@@ -1555,12 +1555,41 @@ function bootstrapApp() {
           position = parsed;
         }
       }
+
+      const createdAt = toDate(data.createdAt);
+      const updatedAt = toDate(data.updatedAt) || createdAt;
+      const ownerUid =
+        typeof data.ownerUid === "string" && data.ownerUid.trim() !== ""
+          ? data.ownerUid.trim()
+          : null;
+      const rawMembers = data.members;
+      let members = {};
+      if (rawMembers && typeof rawMembers === "object" && !Array.isArray(rawMembers)) {
+        members = Object.entries(rawMembers).reduce((acc, [key, value]) => {
+          if (typeof key === "string" && key !== "__proto__") {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
+      }
+      const published =
+        typeof data.published === "boolean"
+          ? data.published
+          : typeof data.published === "string"
+            ? data.published.toLowerCase() === "true"
+            : typeof data.published === "number"
+              ? data.published !== 0
+              : false;
+
       return {
         id: docSnap.id,
         title: data.title || "",
         contentHtml: data.contentHtml || "",
-        createdAt: toDate(data.createdAt),
-        updatedAt: toDate(data.updatedAt),
+        createdAt,
+        updatedAt,
+        ownerUid,
+        members,
+        published,
         parentId:
           typeof data.parentId === "string" && data.parentId.trim() !== ""
             ? data.parentId.trim()
@@ -2077,7 +2106,8 @@ function bootstrapApp() {
     const payload = {
       title: (state.currentNote.title || "").trim(),
       contentHtml: sanitizeHtml(state.currentNote.contentHtml || ""),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      ownerUid: state.userId,
     };
     try {
       await updateDoc(noteRef, payload);
@@ -2755,11 +2785,15 @@ function bootstrapApp() {
     const safeParentId = typeof parentId === "string" && parentId.trim() !== "" ? parentId.trim() : null;
     try {
       const notesRef = collection(db, "users", state.userId, "notes");
+      const timestamp = serverTimestamp();
       const payload = {
         title: "Nouvelle fiche",
         contentHtml: "",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        ownerUid: state.userId,
+        members: {},
+        published: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
         parentId: safeParentId,
         position: getNextSiblingPosition(safeParentId),
       };
