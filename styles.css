@@ -1140,50 +1140,159 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   display: block;
   border-radius: 0.4rem;
 }
+.editor .editor-image__selection {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.5rem;
+  border: 2px solid transparent;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editor .editor-image--selected .editor-image__selection {
+  opacity: 1;
+  border-color: rgba(26, 115, 232, 0.85);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.25);
+}
 
 .editor .editor-image__handle {
   position: absolute;
-  top: 50%;
-  right: 0.3rem;
-  transform: translate(50%, -50%);
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 999px;
-  background: rgba(26, 115, 232, 0.92);
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 0.28rem;
   border: 2px solid #ffffff;
-  box-shadow: 0 4px 8px rgba(26, 115, 232, 0.35);
-  cursor: ew-resize;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
+  background: rgba(26, 115, 232, 0.95);
+  box-shadow: 0 2px 6px rgba(26, 115, 232, 0.35);
+  transform: translate(-50%, -50%);
   touch-action: none;
   user-select: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
 
-.editor .editor-image__handle::after {
-  content: "";
-  width: 0.55rem;
-  height: 0.55rem;
-  border-left: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-  border-radius: 0.2rem;
+.editor .editor-image--selected .editor-image__handle {
+  pointer-events: auto;
+  opacity: 1;
 }
 
 .editor .editor-image__handle:focus-visible,
 .editor .editor-image__handle:hover {
   background: rgba(26, 115, 232, 1);
-  box-shadow: 0 6px 12px rgba(26, 115, 232, 0.45);
+  box-shadow: 0 4px 10px rgba(26, 115, 232, 0.45);
 }
 
 .editor .editor-image__handle:active {
-  transform: translate(50%, -50%) scale(0.94);
+  transform: translate(-50%, -50%) scale(0.9);
 }
 
 .editor .editor-image--resizing .editor-image__handle {
   background: rgba(26, 115, 232, 1);
   box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.25);
+}
+
+.editor .editor-image--cropping .editor-image__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.editor .editor-image--cropping .editor-image__selection {
+  opacity: 0;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.editor .editor-image__handle--n {
+  top: 0;
+  left: 50%;
+  cursor: ns-resize;
+}
+
+.editor .editor-image__handle--s {
+  top: 100%;
+  left: 50%;
+  cursor: ns-resize;
+}
+
+.editor .editor-image__handle--e {
+  top: 50%;
+  left: 100%;
+  cursor: ew-resize;
+}
+
+.editor .editor-image__handle--w {
+  top: 50%;
+  left: 0;
+  cursor: ew-resize;
+}
+
+.editor .editor-image__handle--ne {
+  top: 0;
+  left: 100%;
+  cursor: nesw-resize;
+}
+
+.editor .editor-image__handle--nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.editor .editor-image__handle--se {
+  top: 100%;
+  left: 100%;
+  cursor: nwse-resize;
+}
+
+.editor .editor-image__handle--sw {
+  top: 100%;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.editor .editor-image__crop-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.5rem;
+  background: rgba(17, 24, 39, 0.35);
+  backdrop-filter: blur(1px);
+  display: none;
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.editor .editor-image--cropping .editor-image__crop-overlay {
+  display: block;
+}
+
+.editor .editor-image__crop-overlay.is-dragging {
+  cursor: grabbing;
+}
+
+.editor .editor-image__crop-rect {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.55);
+  border-radius: 0.4rem;
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
+}
+
+.editor .editor-image__crop-instructions {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.6rem;
+  background: rgba(17, 24, 39, 0.72);
+  color: #ffffff;
+  font-size: 0.72rem;
+  border-radius: 0.35rem;
+  pointer-events: none;
+  text-align: center;
 }
 
 .editor:focus {
