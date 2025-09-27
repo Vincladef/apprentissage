@@ -313,7 +313,7 @@ input[type="text"]:focus {
   visibility: hidden;
   transform: translateY(-6px);
   transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 20;
+  z-index: 200;
 }
 
 .header-menu.open {
