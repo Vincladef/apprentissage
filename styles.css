@@ -332,6 +332,13 @@ input[type="text"]:focus {
   box-shadow: none;
 }
 
+.header-menu .menu-item:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  background: transparent;
+  opacity: 0.6;
+}
+
 .header-menu .menu-meta {
   margin: 0 0 0.3rem;
   padding: 0.45rem 0.75rem 0.55rem;
