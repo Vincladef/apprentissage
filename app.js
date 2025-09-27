@@ -9,7 +9,6 @@ import {
   onSnapshot,
   query,
   orderBy,
-  where,
   updateDoc,
   deleteDoc,
   serverTimestamp
@@ -20,7 +19,7 @@ import {
   browserLocalPersistence,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  updateProfile,
+  sendPasswordResetEmail,
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
@@ -93,9 +92,6 @@ function bootstrapApp() {
   const db = getFirestore(app);
   const auth = getAuth(app);
 
-  const AUTH_EMAIL_DOMAIN = "pseudo.apprentissage";
-  const AUTH_PASSWORD_SUFFIX = "#appr";
-  const MIN_PSEUDO_LENGTH = 3;
   const SAVE_DEBOUNCE_MS = 700;
   const HIGHLIGHT_COLOR = "#fde68a";
   const DEFAULT_TEXT_COLOR = "#1f2937";
@@ -162,10 +158,11 @@ function bootstrapApp() {
   });
 
   const state = {
-    pseudo: null,
+    userId: null,
+    userEmail: null,
     displayName: null,
-    pendingDisplayName: null,
-    pendingVisibility: null,
+    profile: null,
+    activeAuthView: "login",
     notesUnsubscribe: null,
     notes: [],
     notesById: new Map(),
@@ -183,9 +180,6 @@ function bootstrapApp() {
     isRevisionMode: false,
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
-    visibility: null,
-    publicUsers: [],
-    publicUsersUnsubscribe: null,
   };
 
   const imageResizeState = {
@@ -214,12 +208,15 @@ function bootstrapApp() {
   };
 
   const ui = {
+    authTabs: Array.from(document.querySelectorAll(".auth-tab")),
+    authViews: Array.from(document.querySelectorAll(".auth-view")),
     loginForm: document.getElementById("login-form"),
-    pseudoInput: document.getElementById("pseudo"),
-    loginButton: document.querySelector("#login-form button[type='submit']"),
-    publicAccountsSection: document.getElementById("public-accounts"),
-    publicUsersList: document.getElementById("public-users-list"),
-    publicUsersEmpty: document.getElementById("public-users-empty"),
+    registerForm: document.getElementById("register-form"),
+    resetForm: document.getElementById("reset-form"),
+    loginError: document.getElementById("login-error"),
+    registerError: document.getElementById("register-error"),
+    resetError: document.getElementById("reset-error"),
+    resetSuccess: document.getElementById("reset-success"),
     currentUser: document.getElementById("current-user"),
     logoutBtn: document.getElementById("logout-btn"),
     headerMenuBtn: document.getElementById("workspace-menu-btn"),
@@ -260,17 +257,6 @@ function bootstrapApp() {
       ui.mobileAddNoteBtn.removeAttribute("aria-label");
     }
   }
-
-  ui.visibilityInputs = ui.loginForm
-    ? Array.from(ui.loginForm.querySelectorAll("input[name='visibility']"))
-    : [];
-  ui.visibilityField = ui.loginForm?.elements?.namedItem("visibility") ?? null;
-  if (ui.publicUsersList) {
-    ui.publicUsersList.setAttribute("aria-live", "polite");
-  }
-  const defaultPublicUsersEmptyMessage = ui.publicUsersEmpty?.textContent?.trim()
-    ? ui.publicUsersEmpty.textContent
-    : "Aucun compte public pour le moment.";
 
   const workspaceLayout = document.querySelector(".workspace");
   const bodyElement = document.body;
@@ -769,46 +755,10 @@ function bootstrapApp() {
 
   function reportPermissionIssue(context) {
     const hint =
-      "Règles Firestore insuffisantes. Déployez le fichier firestore.rules dans votre projet et vérifiez AUTH_EMAIL_DOMAIN.";
+      "Règles Firestore insuffisantes. Déployez le fichier firestore.rules dans votre projet et vérifiez la configuration d'authentification.";
     const fullMessage = context ? `${context} : ${hint}` : hint;
     console.error(fullMessage);
     showToast("Permissions Firestore insuffisantes. Consultez la console pour les étapes.", "error");
-  }
-
-  function normalizePseudoInput(rawPseudo = "") {
-    const trimmed = (rawPseudo || "").trim();
-    if (!trimmed) {
-      return { pseudoKey: "", displayName: "" };
-    }
-    const ascii = trimmed
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    const lower = ascii.toLowerCase();
-    const safe = lower
-      .replace(/[^a-z0-9._-]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^[.-]+|[.-]+$/g, "");
-    return { pseudoKey: safe, displayName: trimmed };
-  }
-
-  function sanitizeVisibility(rawVisibility) {
-    return rawVisibility === "public" ? "public" : "private";
-  }
-
-  function buildAuthEmail(pseudoKey) {
-    return `${pseudoKey}@${AUTH_EMAIL_DOMAIN}`;
-  }
-
-  function buildAuthPassword(pseudoKey) {
-    return `${pseudoKey}${AUTH_PASSWORD_SUFFIX}`;
-  }
-
-  function extractPseudoFromEmail(email = "") {
-    const suffix = `@${AUTH_EMAIL_DOMAIN}`;
-    if (!email || !email.endsWith(suffix)) {
-      return null;
-    }
-    return email.slice(0, -suffix.length);
   }
 
   function sanitizeHtml(html = "") {
@@ -2120,10 +2070,10 @@ function bootstrapApp() {
   }
 
   async function saveCurrentNote() {
-    if (!state.currentNote || !state.pseudo || !state.currentNoteId) return;
+    if (!state.currentNote || !state.userId || !state.currentNoteId) return;
     if (!state.hasUnsavedChanges) return;
     updateSaveStatus("saving");
-    const noteRef = doc(db, "users", state.pseudo, "notes", state.currentNoteId);
+    const noteRef = doc(db, "users", state.userId, "notes", state.currentNoteId);
     const payload = {
       title: (state.currentNote.title || "").trim(),
       contentHtml: sanitizeHtml(state.currentNote.contentHtml || ""),
@@ -2801,10 +2751,10 @@ function bootstrapApp() {
   }
 
   async function createNote(parentId = null) {
-    if (!state.pseudo) return;
+    if (!state.userId) return;
     const safeParentId = typeof parentId === "string" && parentId.trim() !== "" ? parentId.trim() : null;
     try {
-      const notesRef = collection(db, "users", state.pseudo, "notes");
+      const notesRef = collection(db, "users", state.userId, "notes");
       const payload = {
         title: "Nouvelle fiche",
         contentHtml: "",
@@ -2861,7 +2811,7 @@ function bootstrapApp() {
   }
 
   async function deleteNote(noteId) {
-    if (!state.pseudo || !noteId) return;
+    if (!state.userId || !noteId) return;
     const note = getNoteFromState(noteId);
     const titleText = note?.title && note.title.trim() ? note.title.trim() : "Sans titre";
     const descendantCount = note ? countDescendants(note) : 0;
@@ -2877,7 +2827,7 @@ function bootstrapApp() {
       await flushPendingSave();
       const idsToDelete = collectNoteHierarchyIds(noteId);
       for (const id of idsToDelete) {
-        await deleteDoc(doc(db, "users", state.pseudo, "notes", id));
+        await deleteDoc(doc(db, "users", state.userId, "notes", id));
         state.collapsedNoteIds.delete(id);
       }
       if (state.currentNoteId && idsToDelete.includes(state.currentNoteId)) {
@@ -2892,83 +2842,205 @@ function bootstrapApp() {
     }
   }
 
-  async function ensureUserExists(pseudo, options = {}) {
-    const ref = doc(db, "users", pseudo);
-    const desiredVisibility = sanitizeVisibility(options.visibility);
-    const desiredDisplayName =
-      typeof options.displayName === "string" && options.displayName.trim()
-        ? options.displayName.trim()
-        : "";
-
-    const providedUser = options.user;
-    const authUser =
-      providedUser && typeof providedUser === "object" ? providedUser : auth.currentUser;
-    const ownerUid = authUser?.uid || auth.currentUser?.uid || null;
-    const ownerEmailRaw = authUser?.email || auth.currentUser?.email || buildAuthEmail(pseudo);
-    const ownerEmail = ownerEmailRaw ? ownerEmailRaw.toLowerCase() : null;
-
-    if (!ownerUid || !ownerEmail) {
-      throw new Error("Utilisateur authentifié invalide : UID ou e-mail manquant.");
+  function setFormPending(form, pending) {
+    if (!form) {
+      return;
     }
+    const elements = Array.from(
+      form.querySelectorAll("input, button, select, textarea")
+    );
+    elements.forEach((element) => {
+      element.disabled = pending;
+    });
+  }
 
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      const newData = {
-        createdAt: serverTimestamp(),
-        visibility: desiredVisibility,
-        ownerUid,
-        ownerEmail,
-      };
-      if (desiredDisplayName) {
-        newData.displayName = desiredDisplayName;
+  function setAuthMessage(element, message) {
+    if (!element) {
+      return;
+    }
+    if (message && message.trim()) {
+      element.textContent = message;
+      element.classList.remove("hidden");
+    } else {
+      element.textContent = "";
+      element.classList.add("hidden");
+    }
+  }
+
+  function clearAuthMessages() {
+    setAuthMessage(ui.loginError, "");
+    setAuthMessage(ui.registerError, "");
+    setAuthMessage(ui.resetError, "");
+    setAuthMessage(ui.resetSuccess, "");
+  }
+
+  function showAuthView(viewName = "login") {
+    const target = viewName || "login";
+    state.activeAuthView = target;
+    clearAuthMessages();
+    ui.authViews.forEach((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
       }
-      await setDoc(ref, newData);
-      return {
-        visibility: desiredVisibility,
-        displayName: desiredDisplayName || null,
-      };
-    }
+      const view = element.dataset.authView;
+      const isActive = view === target;
+      element.classList.toggle("hidden", !isActive);
+      element.setAttribute("aria-hidden", String(!isActive));
+      if (isActive) {
+        const focusTarget = element.querySelector(
+          "input:not([type='hidden']):not([disabled])"
+        );
+        if (focusTarget && typeof focusTarget.focus === "function") {
+          focusTarget.focus();
+        }
+      }
+    });
+    ui.authTabs.forEach((button) => {
+      if (!(button instanceof HTMLElement)) {
+        return;
+      }
+      const view = button.getAttribute("data-auth-view-target");
+      const isActive = view === target;
+      button.classList.toggle("active", isActive);
+      if (isActive) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+  }
 
-    const data = snap.data() || {};
-    const updates = {};
-    let resolvedVisibility = data.visibility === "public" ? "public" : "private";
-    if (!("visibility" in data) || resolvedVisibility !== desiredVisibility) {
-      updates.visibility = desiredVisibility;
-      resolvedVisibility = desiredVisibility;
+  function getAuthErrorMessage(error, context) {
+    const code = typeof error?.code === "string" ? error.code : "";
+    switch (code) {
+      case "auth/invalid-email":
+        return "Adresse e-mail invalide.";
+      case "auth/email-already-in-use":
+        return "Cette adresse e-mail est déjà utilisée.";
+      case "auth/weak-password":
+        return "Mot de passe trop faible (6 caractères minimum).";
+      case "auth/invalid-credential":
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+        return "E-mail ou mot de passe incorrect.";
+      case "auth/too-many-requests":
+        return "Trop de tentatives. Réessayez dans quelques instants.";
+      case "auth/network-request-failed":
+        return "Connexion impossible. Vérifiez votre réseau.";
+      default:
+        break;
     }
-
-    let resolvedDisplayName =
-      typeof data.displayName === "string" && data.displayName.trim()
-        ? data.displayName.trim()
-        : "";
-    if (desiredDisplayName && resolvedDisplayName !== desiredDisplayName) {
-      updates.displayName = desiredDisplayName;
-      resolvedDisplayName = desiredDisplayName;
+    switch (context) {
+      case "register":
+        return "Inscription impossible pour le moment. Veuillez réessayer.";
+      case "login":
+        return "Connexion impossible pour le moment. Veuillez réessayer.";
+      case "reset":
+        return "Envoi impossible pour le moment. Veuillez réessayer.";
+      default:
+        return "Une erreur inattendue est survenue.";
     }
+  }
 
-    if (typeof data.ownerUid !== "string" || data.ownerUid !== ownerUid) {
-      updates.ownerUid = ownerUid;
+  async function handleRegisterSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : ui.registerForm;
+    if (!form) {
+      return;
     }
-
-    const currentOwnerEmail =
-      typeof data.ownerEmail === "string" ? data.ownerEmail.toLowerCase() : "";
-    if (!currentOwnerEmail || currentOwnerEmail !== ownerEmail) {
-      updates.ownerEmail = ownerEmail;
+    const formData = new FormData(form);
+    const email = (formData.get("email") || "").toString().trim();
+    const password = (formData.get("password") || "").toString();
+    const pseudoRaw = (formData.get("pseudo") || "").toString();
+    const pseudo = pseudoRaw.trim();
+    setAuthMessage(ui.registerError, "");
+    if (!email || !password) {
+      setAuthMessage(ui.registerError, "Veuillez renseigner un e-mail et un mot de passe.");
+      return;
     }
-
-    if (Object.keys(updates).length > 0) {
-      await updateDoc(ref, updates);
+    setFormPending(form, true);
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = credential.user;
+      if (user?.uid) {
+        const profileRef = doc(db, "profiles", user.uid);
+        const payload = {
+          pseudo: pseudo ? pseudo : null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        try {
+          await setDoc(profileRef, payload);
+        } catch (profileError) {
+          console.warn("Impossible d'enregistrer le pseudo", profileError);
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'inscription", error);
+      setAuthMessage(ui.registerError, getAuthErrorMessage(error, "register"));
+    } finally {
+      setFormPending(form, false);
     }
+  }
 
-    return {
-      visibility: resolvedVisibility,
-      displayName: resolvedDisplayName || null,
-    };
+  async function handleLoginSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : ui.loginForm;
+    if (!form) {
+      return;
+    }
+    const formData = new FormData(form);
+    const email = (formData.get("email") || "").toString().trim();
+    const password = (formData.get("password") || "").toString();
+    setAuthMessage(ui.loginError, "");
+    if (!email || !password) {
+      setAuthMessage(ui.loginError, "Veuillez renseigner votre e-mail et votre mot de passe.");
+      return;
+    }
+    setFormPending(form, true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error("Erreur lors de la connexion", error);
+      setAuthMessage(ui.loginError, getAuthErrorMessage(error, "login"));
+    } finally {
+      setFormPending(form, false);
+    }
+  }
+
+  async function handleResetSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : ui.resetForm;
+    if (!form) {
+      return;
+    }
+    const formData = new FormData(form);
+    const email = (formData.get("email") || "").toString().trim();
+    setAuthMessage(ui.resetError, "");
+    setAuthMessage(ui.resetSuccess, "");
+    if (!email) {
+      setAuthMessage(ui.resetError, "Veuillez renseigner votre adresse e-mail.");
+      return;
+    }
+    setFormPending(form, true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setAuthMessage(
+        ui.resetSuccess,
+        "Un e-mail de réinitialisation vient d'être envoyé si le compte existe."
+      );
+      form.reset();
+    } catch (error) {
+      console.error("Erreur lors de la réinitialisation du mot de passe", error);
+      setAuthMessage(ui.resetError, getAuthErrorMessage(error, "reset"));
+    } finally {
+      setFormPending(form, false);
+    }
   }
 
   function subscribeToNotes() {
-    if (!state.pseudo) return;
-    const ref = collection(db, "users", state.pseudo, "notes");
+    if (!state.userId) return;
+    const ref = collection(db, "users", state.userId, "notes");
     const q = query(ref, orderBy("parentId"), orderBy("position"), orderBy("updatedAt", "desc"));
     if (state.notesUnsubscribe) {
       state.notesUnsubscribe();
@@ -2989,111 +3061,6 @@ function bootstrapApp() {
     );
   }
 
-  function updatePublicUsersList(users) {
-    state.publicUsers = users;
-    if (!ui.publicUsersList || !ui.publicUsersEmpty) {
-      return;
-    }
-    ui.publicUsersList.innerHTML = "";
-    if (!users || users.length === 0) {
-      ui.publicUsersEmpty.textContent = defaultPublicUsersEmptyMessage;
-      ui.publicUsersEmpty.classList.remove("hidden");
-      return;
-    }
-    ui.publicUsersEmpty.classList.add("hidden");
-    const fragment = document.createDocumentFragment();
-    users.forEach((userInfo) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "public-user-button";
-      button.dataset.pseudo = userInfo.id;
-      button.setAttribute("role", "listitem");
-      button.title = `Utiliser le compte public ${userInfo.displayName}`;
-
-      const name = document.createElement("span");
-      name.className = "public-user-name";
-      name.textContent = userInfo.displayName;
-
-      const pseudo = document.createElement("span");
-      pseudo.className = "public-user-pseudo";
-      pseudo.textContent = `@${userInfo.id}`;
-
-      button.append(name, pseudo);
-      fragment.appendChild(button);
-    });
-    ui.publicUsersList.appendChild(fragment);
-  }
-
-  function subscribeToPublicUsers() {
-    if (!ui.publicUsersList) {
-      return;
-    }
-    if (state.publicUsersUnsubscribe) {
-      state.publicUsersUnsubscribe();
-      state.publicUsersUnsubscribe = null;
-    }
-    const usersRef = collection(db, "users");
-    const publicUsersQuery = query(usersRef, where("visibility", "==", "public"));
-    state.publicUsersUnsubscribe = onSnapshot(
-      publicUsersQuery,
-      (snapshot) => {
-        const users = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data() || {};
-          if (sanitizeVisibility(data.visibility) !== "public") {
-            return;
-          }
-          const displayName =
-            typeof data.displayName === "string" && data.displayName.trim()
-              ? data.displayName.trim()
-              : docSnap.id;
-          users.push({ id: docSnap.id, displayName });
-        });
-        users.sort((a, b) => {
-          const nameOrder = a.displayName.localeCompare(b.displayName, "fr", {
-            sensitivity: "base",
-          });
-          if (nameOrder !== 0) {
-            return nameOrder;
-          }
-          return a.id.localeCompare(b.id, "fr", { sensitivity: "base" });
-        });
-        updatePublicUsersList(users);
-      },
-      (error) => {
-        console.error("Erreur lors du chargement des comptes publics", error);
-        updatePublicUsersList([]);
-        if (isPermissionDenied(error)) {
-          reportPermissionIssue("Lecture des comptes publics refusée par Firestore");
-        }
-        if (ui.publicUsersEmpty) {
-          ui.publicUsersEmpty.textContent = isPermissionDenied(error)
-            ? "Activez les règles Firestore fournies dans firestore.rules pour afficher les comptes publics."
-            : "Impossible de charger les comptes publics pour le moment.";
-          ui.publicUsersEmpty.classList.remove("hidden");
-        }
-      }
-    );
-  }
-
-  function handlePublicUsersClick(event) {
-    const source = event.target instanceof Element ? event.target : null;
-    const target = source?.closest("[data-pseudo]");
-    if (!target) {
-      return;
-    }
-    const pseudo = target.getAttribute("data-pseudo");
-    if (!pseudo || !ui.pseudoInput) {
-      return;
-    }
-    ui.pseudoInput.value = pseudo;
-    ui.pseudoInput.focus();
-    const publicOption = ui.visibilityInputs.find((input) => input.value === "public");
-    if (publicOption) {
-      publicOption.checked = true;
-    }
-  }
-
   function resetState() {
     if (state.notesUnsubscribe) {
       state.notesUnsubscribe();
@@ -3103,11 +3070,10 @@ function bootstrapApp() {
       clearTimeout(state.pendingSave);
       state.pendingSave = null;
     }
-    state.pseudo = null;
+    state.userId = null;
+    state.userEmail = null;
     state.displayName = null;
-    state.visibility = null;
-    state.pendingDisplayName = null;
-    state.pendingVisibility = null;
+    state.profile = null;
     state.notes = [];
     state.notesById = new Map();
     state.collapsedNoteIds = new Set();
@@ -3124,180 +3090,64 @@ function bootstrapApp() {
     ui.logoutBtn.disabled = true;
   }
 
-  async function handleLoginSubmit(event) {
-    event.preventDefault();
-    const { pseudoKey, displayName } = normalizePseudoInput(ui.pseudoInput.value);
-    const selectedVisibility = sanitizeVisibility(ui.visibilityField?.value);
-    if (!pseudoKey || pseudoKey.length < MIN_PSEUDO_LENGTH) {
-      showToast(
-        `Pseudo invalide. Utilisez au moins ${MIN_PSEUDO_LENGTH} caractères autorisés (lettres, chiffres, . _ -).`,
-        "error"
-      );
-      return;
-    }
-    ui.loginButton.disabled = true;
-    ui.pseudoInput.disabled = true;
-    ui.visibilityInputs.forEach((input) => {
-      input.disabled = true;
-    });
-    state.pendingVisibility = selectedVisibility;
-    try {
-      await login(pseudoKey, displayName, selectedVisibility);
-    } catch (error) {
-      console.error(error);
-      let message = "Impossible de se connecter";
-      if (isPermissionDenied(error)) {
-        reportPermissionIssue("Connexion refusée par Firestore");
-        message =
-          "Permissions Firestore insuffisantes pour se connecter. Consultez la console pour les étapes de configuration.";
-      }
-      switch (error?.code) {
-        case "auth/invalid-email":
-        case "auth/missing-email":
-          message = "Pseudo invalide. Vérifiez les caractères utilisés.";
-          break;
-        case "auth/configuration-not-found":
-        case "auth/operation-not-allowed":
-          message =
-            "La connexion e-mail/mot de passe n'est pas configurée. Vérifiez firebase-config.js puis activez la méthode 'Email/Mot de passe' dans Firebase Authentication.";
-          break;
-        case "auth/too-many-requests":
-          message = "Trop de tentatives de connexion. Réessayez plus tard.";
-          break;
-        case "auth/network-request-failed":
-          message = "Connexion réseau requise pour accéder à vos fiches.";
-          break;
-        case "auth/wrong-password":
-          message = "Ce pseudo est déjà utilisé avec un autre mot de passe.";
-          break;
-        default:
-          break;
-      }
-      showToast(message, "error");
-    } finally {
-      ui.loginButton.disabled = false;
-      ui.pseudoInput.disabled = false;
-      ui.visibilityInputs.forEach((input) => {
-        input.disabled = false;
-      });
-    }
-  }
-
-  async function login(pseudoKey, displayName, visibility) {
-    state.pendingDisplayName = displayName;
-    state.pendingVisibility = sanitizeVisibility(visibility);
-    const email = buildAuthEmail(pseudoKey);
-    const password = buildAuthPassword(pseudoKey);
-    try {
-      let credential = null;
-      try {
-        credential = await signInWithEmailAndPassword(auth, email, password);
-      } catch (error) {
-        if (error?.code === "auth/user-not-found" || error?.code === "auth/invalid-credential") {
-          credential = await createUserWithEmailAndPassword(auth, email, password);
-          if (credential.user && displayName) {
-            try {
-              await updateProfile(credential.user, { displayName });
-            } catch (profileError) {
-              console.warn("Impossible de mettre à jour le profil", profileError);
-            }
-          }
-        } else {
-          throw error;
-        }
-      }
-      const currentUser = credential?.user || auth.currentUser;
-      if (currentUser && displayName && currentUser.displayName !== displayName) {
-        try {
-          await updateProfile(currentUser, { displayName });
-        } catch (profileError) {
-          console.warn("Impossible de mettre à jour le profil", profileError);
-        }
-      }
-      const ensuredUser = await ensureUserExists(pseudoKey, {
-        visibility: state.pendingVisibility,
-        displayName,
-        user: credential?.user || auth.currentUser,
-      });
-      if (ensuredUser?.visibility) {
-        state.pendingVisibility = ensuredUser.visibility;
-      }
-    } catch (error) {
-      state.pendingDisplayName = null;
-      state.pendingVisibility = null;
-      throw error;
-    }
-  }
-
   async function handleAuthState(user) {
-    const pendingDisplayName = state.pendingDisplayName;
-    const pendingVisibility = state.pendingVisibility;
     resetState();
     if (!user) {
       if (ui.loginForm) {
         ui.loginForm.reset();
       }
-      if (ui.visibilityInputs.length) {
-        const privateOption = ui.visibilityInputs.find((input) => input.value === "private");
-        if (privateOption) {
-          privateOption.checked = true;
-        }
+      if (ui.registerForm) {
+        ui.registerForm.reset();
+      }
+      if (ui.resetForm) {
+        ui.resetForm.reset();
       }
       showView("login");
+      showAuthView("login");
       return;
     }
 
-    const pseudoKey = extractPseudoFromEmail(user.email || "");
-    if (!pseudoKey) {
-      console.error("Utilisateur connecté avec une adresse e-mail inattendue", user.email);
-      showToast("Profil invalide détecté. Déconnexion en cours.", "error");
-      await signOut(auth);
-      return;
-    }
+    state.userId = user.uid;
+    state.userEmail = typeof user.email === "string" ? user.email : "";
 
-    state.pseudo = pseudoKey;
-
-    let userDocData = null;
+    let profileData = null;
     try {
-      const snapshot = await getDoc(doc(db, "users", pseudoKey));
-      if (snapshot.exists()) {
-        userDocData = snapshot.data() || {};
+      const profileSnap = await getDoc(doc(db, "profiles", user.uid));
+      if (profileSnap.exists()) {
+        profileData = profileSnap.data() || {};
       }
     } catch (error) {
-      console.warn("Impossible de récupérer le profil utilisateur", error);
+      console.warn("Impossible de charger le profil utilisateur", error);
     }
 
-    const docDisplayName =
-      typeof userDocData?.displayName === "string" && userDocData.displayName.trim()
-        ? userDocData.displayName.trim()
+    state.profile = profileData || {};
+    const pseudo =
+      typeof profileData?.pseudo === "string" && profileData.pseudo.trim()
+        ? profileData.pseudo.trim()
         : "";
-    const resolvedDisplayName =
-      user.displayName ||
-      pendingDisplayName ||
-      docDisplayName ||
-      pseudoKey;
-    state.displayName = resolvedDisplayName;
-    state.pendingDisplayName = null;
-
-    const resolvedVisibility = userDocData
-      ? sanitizeVisibility(userDocData.visibility)
-      : sanitizeVisibility(pendingVisibility);
-    state.visibility = resolvedVisibility;
-    state.pendingVisibility = null;
-
-    const visibilityLabel =
-      resolvedVisibility === "public" ? "compte public" : "compte privé";
-    ui.currentUser.textContent = `Connecté en tant que ${resolvedDisplayName} · ${visibilityLabel}`;
+    const identityParts = [];
+    if (pseudo) {
+      identityParts.push(pseudo);
+    }
+    if (state.userEmail) {
+      identityParts.push(state.userEmail);
+    }
+    const identityLabel = identityParts.length
+      ? `Connecté en tant que ${identityParts.join(" · ")}`
+      : "Connecté";
+    ui.currentUser.textContent = identityLabel;
+    state.displayName = pseudo || state.userEmail || "Utilisateur";
     ui.logoutBtn.disabled = false;
     if (ui.loginForm) {
       ui.loginForm.reset();
     }
-    if (ui.visibilityInputs.length) {
-      const privateOption = ui.visibilityInputs.find((input) => input.value === "private");
-      if (privateOption) {
-        privateOption.checked = true;
-      }
+    if (ui.registerForm) {
+      ui.registerForm.reset();
     }
+    if (ui.resetForm) {
+      ui.resetForm.reset();
+    }
+    clearAuthMessages();
     subscribeToNotes();
     showView("workspace");
   }
@@ -3332,9 +3182,24 @@ function bootstrapApp() {
   }
 
   function initEvents() {
-    ui.loginForm.addEventListener("submit", handleLoginSubmit);
-    if (ui.publicUsersList) {
-      ui.publicUsersList.addEventListener("click", handlePublicUsersClick);
+    if (ui.authTabs.length) {
+      ui.authTabs.forEach((button) => {
+        button.addEventListener("click", () => {
+          const target = button.getAttribute("data-auth-view-target");
+          if (target) {
+            showAuthView(target);
+          }
+        });
+      });
+    }
+    if (ui.loginForm) {
+      ui.loginForm.addEventListener("submit", handleLoginSubmit);
+    }
+    if (ui.registerForm) {
+      ui.registerForm.addEventListener("submit", handleRegisterSubmit);
+    }
+    if (ui.resetForm) {
+      ui.resetForm.addEventListener("submit", handleResetSubmit);
     }
     ui.logoutBtn.addEventListener("click", logout);
     ui.addNoteBtn.addEventListener("click", () => {
@@ -3403,7 +3268,7 @@ function bootstrapApp() {
     });
   }
 
-  subscribeToPublicUsers();
+  showAuthView(state.activeAuthView);
   initEvents();
   updateToolbarFormattingLayout();
   if (typeof mobileMediaQuery.addEventListener === "function") {

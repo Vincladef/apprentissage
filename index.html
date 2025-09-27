@@ -205,58 +205,104 @@
 
     <main class="app-main">
       <section id="login-screen" class="view active">
-        <div class="card">
+        <div class="card auth-card">
           <h2>Bienvenue !</h2>
-          <p>Choisissez un pseudo pour créer vos fiches d'apprentissage actives.</p>
-          <form id="login-form" class="stack">
-            <label for="pseudo">Pseudo</label>
+          <p>Créez un compte ou connectez-vous pour retrouver vos fiches.</p>
+          <nav class="auth-tabs" aria-label="Navigation d'authentification">
+            <button
+              type="button"
+              class="auth-tab active"
+              data-auth-view-target="login"
+              aria-current="page"
+            >
+              Connexion
+            </button>
+            <button
+              type="button"
+              class="auth-tab"
+              data-auth-view-target="register"
+            >
+              Inscription
+            </button>
+            <button
+              type="button"
+              class="auth-tab"
+              data-auth-view-target="reset"
+            >
+              Mot de passe oublié
+            </button>
+          </nav>
+          <form id="login-form" class="stack auth-view" data-auth-view="login">
+            <label for="login-email">E-mail</label>
             <input
-              id="pseudo"
+              id="login-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+            />
+            <label for="login-password">Mot de passe</label>
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+            <p id="login-error" class="form-message error hidden" role="alert"></p>
+            <button type="submit">Se connecter</button>
+          </form>
+          <form
+            id="register-form"
+            class="stack auth-view hidden"
+            data-auth-view="register"
+            novalidate
+          >
+            <label for="register-email">E-mail</label>
+            <input
+              id="register-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+            />
+            <label for="register-password">Mot de passe</label>
+            <input
+              id="register-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="6"
+            />
+            <label for="register-pseudo">Pseudo (optionnel)</label>
+            <input
+              id="register-pseudo"
               name="pseudo"
               type="text"
-              required
-              minlength="3"
-              maxlength="32"
               autocomplete="nickname"
-              placeholder="ex.&nbsp;: astrofan"
+              maxlength="64"
             />
-            <fieldset class="visibility-options">
-              <legend>Visibilité du compte</legend>
-              <p class="muted small">
-                Choisissez si votre compte est répertorié publiquement sur cette page.
-              </p>
-              <label class="visibility-choice">
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="private"
-                  checked
-                />
-                <span>
-                  <strong>Compte privé</strong>
-                  <span class="muted small">Seul vous pouvez voir vos fiches.</span>
-                </span>
-              </label>
-              <label class="visibility-choice">
-                <input type="radio" name="visibility" value="public" />
-                <span>
-                  <strong>Compte public</strong>
-                  <span class="muted small">Votre pseudo est listé ci-dessous.</span>
-                </span>
-              </label>
-            </fieldset>
-            <button type="submit">Commencer</button>
+            <p id="register-error" class="form-message error hidden" role="alert"></p>
+            <button type="submit">Créer un compte</button>
           </form>
-          <section id="public-accounts" class="public-accounts">
-            <h3>Comptes publics disponibles</h3>
-            <p id="public-users-empty" class="muted small">
-              Aucun compte public pour le moment.
-            </p>
-            <div id="public-users-list" class="public-users-list" role="list"></div>
-          </section>
-          <p class="muted small">
-            Astuce : vous pouvez revenir plus tard avec le même pseudo pour retrouver vos fiches.
-          </p>
+          <form
+            id="reset-form"
+            class="stack auth-view hidden"
+            data-auth-view="reset"
+          >
+            <label for="reset-email">E-mail</label>
+            <input
+              id="reset-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+            />
+            <p id="reset-error" class="form-message error hidden" role="alert"></p>
+            <p id="reset-success" class="form-message success hidden" role="status"></p>
+            <button type="submit">Envoyer le lien de réinitialisation</button>
+          </form>
         </div>
       </section>
 
