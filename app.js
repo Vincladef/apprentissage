@@ -4172,7 +4172,13 @@ function bootstrapApp() {
     const shouldOpen = Boolean(open);
     if (!ui.textColorPopover || !ui.textColorButton) {
       state.isTextColorPopoverOpen = false;
+      if (ui.toolbar) {
+        ui.toolbar.classList.remove("color-popover-open");
+      }
       return;
+    }
+    if (ui.toolbar) {
+      ui.toolbar.classList.toggle("color-popover-open", shouldOpen);
     }
     if (shouldOpen === state.isTextColorPopoverOpen) {
       if (shouldOpen && ui.textColorCustomInput) {
