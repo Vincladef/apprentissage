@@ -2260,6 +2260,10 @@ body.notes-drawer-open .drawer-overlay {
     scrollbar-width: none;
   }
 
+  .editor-toolbar.color-popover-open .toolbar-row {
+    overflow: visible;
+  }
+
   .toolbar-row::-webkit-scrollbar {
     display: none;
   }
