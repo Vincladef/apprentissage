@@ -2439,8 +2439,9 @@ body.revision-mode .editor:focus {
  * doivent désormais adopter la même mise en page que les consignes de
  * pratique afin d'offrir une largeur identique pour les sous-consignes.
  */
-.editor .habit-consigne {
+.habit-consigne {
   width: min(100%, 720px);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -2451,24 +2452,24 @@ body.revision-mode .editor:focus {
   background: linear-gradient(135deg, rgba(254, 226, 226, 0.88), rgba(254, 215, 170, 0.88));
 }
 
-.editor .habit-consigne__title {
+.habit-consigne__title {
   font-size: 1.05rem;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.editor .habit-consigne__subtitle {
+.habit-consigne__subtitle {
   font-size: 0.9rem;
   color: rgba(15, 23, 42, 0.75);
 }
 
-.editor .habit-consigne__subtasks {
+.habit-consigne__subtasks {
   display: grid;
   gap: 0.9rem;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-.editor .habit-consigne__subtask {
+.habit-consigne__subtask {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
@@ -2478,7 +2479,7 @@ body.revision-mode .editor:focus {
   padding: 0.85rem;
 }
 
-.editor .habit-consigne__subtask-header {
+.habit-consigne__subtask-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2486,27 +2487,27 @@ body.revision-mode .editor:focus {
   font-weight: 500;
 }
 
-.editor .habit-consigne__subtask-actions {
+.habit-consigne__subtask-actions {
   display: flex;
   gap: 0.5rem;
 }
 
-.editor .habit-consigne__subtask select,
-.editor .habit-consigne__subtask button,
-.editor .habit-consigne__subtask input,
-.editor .habit-consigne__subtask textarea {
+.habit-consigne__subtask select,
+.habit-consigne__subtask button,
+.habit-consigne__subtask input,
+.habit-consigne__subtask textarea {
   width: 100%;
 }
 
-.editor .habit-consigne__subtask button {
+.habit-consigne__subtask button {
   justify-content: center;
 }
 
-.editor .habit-consigne--practice .habit-consigne__subtasks,
-.editor .habit-consigne--daily .habit-consigne__subtasks {
+.habit-consigne--practice .habit-consigne__subtasks,
+.habit-consigne--daily .habit-consigne__subtasks {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-.editor .habit-consigne--daily {
+.habit-consigne--daily {
   background: linear-gradient(135deg, rgba(254, 249, 195, 0.88), rgba(254, 226, 226, 0.88));
 }
