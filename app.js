@@ -4261,8 +4261,74 @@ function bootstrapApp() {
     const normalized = normalizeHexColor(color);
     const value = /^#[0-9a-f]{6}$/.test(normalized) ? normalized : DEFAULT_TEXT_COLOR;
     runWithPreservedSelection(() => {
-      document.execCommand("foreColor", false, value);
+      let applied = false;
+      let styleWithCssEnabled = false;
+      let previousStyleWithCss = false;
+      let canUseStyleWithCss = false;
+      if (typeof document.queryCommandSupported === "function") {
+        try {
+          canUseStyleWithCss = document.queryCommandSupported("styleWithCSS");
+        } catch (error) {
+          canUseStyleWithCss = false;
+        }
+      }
+
+      if (canUseStyleWithCss) {
+        if (typeof document.queryCommandState === "function") {
+          try {
+            previousStyleWithCss = document.queryCommandState("styleWithCSS");
+          } catch (error) {
+            previousStyleWithCss = false;
+          }
+        }
+        try {
+          document.execCommand("styleWithCSS", false, "true");
+          styleWithCssEnabled = true;
+        } catch (error) {
+          styleWithCssEnabled = false;
+        }
+      }
+
+      try {
+        applied = document.execCommand("foreColor", false, value);
+      } catch (error) {
+        applied = false;
+      } finally {
+        if (styleWithCssEnabled) {
+          const restoreValue = previousStyleWithCss ? "true" : "false";
+          try {
+            document.execCommand("styleWithCSS", false, restoreValue);
+          } catch (error) {
+            // Ignore inability to restore the previous mode.
+          }
+        }
+      }
+
+      if (!applied) {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          if (!range.collapsed) {
+            const span = document.createElement("span");
+            span.style.color = value;
+            try {
+              const contents = range.extractContents();
+              span.appendChild(contents);
+              range.insertNode(span);
+              selection.removeAllRanges();
+              const newRange = document.createRange();
+              newRange.selectNodeContents(span);
+              selection.addRange(newRange);
+              applied = true;
+            } catch (error) {
+              // Ignore extraction errors (e.g. partial selections that cannot be wrapped).
+            }
+          }
+        }
+      }
+
       handleEditorInput();
+      return applied;
     });
     updateTextColorState(value);
   }
