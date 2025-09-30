@@ -291,6 +291,8 @@ function bootstrapApp() {
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
     share: createShareState(),
+    visibleClozePriorities: new Set(CLOZE_PRIORITY_VALUES),
+    isClozeFilterMenuOpen: false,
   };
 
   const imageResizeState = {
@@ -327,6 +329,13 @@ function bootstrapApp() {
       state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
     }
     return state[CLOZE_MANUAL_REVEAL_SET_KEY];
+  }
+
+  function ensureVisibleClozePriorities() {
+    if (!(state.visibleClozePriorities instanceof Set)) {
+      state.visibleClozePriorities = new Set(CLOZE_PRIORITY_VALUES);
+    }
+    return state.visibleClozePriorities;
   }
 
   const views = {
@@ -377,6 +386,8 @@ function bootstrapApp() {
     desktopFormattingSlot: document.querySelector("[data-desktop-formatting-slot]"),
     revisionModeToggle: document.getElementById("revision-mode-toggle"),
     revisionIterationBtn: document.getElementById("revision-iteration-btn"),
+    clozeFilterBtn: document.getElementById("cloze-filter-btn"),
+    clozeFilterMenu: document.getElementById("cloze-filter-menu"),
     shareButton: document.getElementById("share-note-btn"),
     shareDialog: document.getElementById("share-dialog"),
     shareDialogClose: document.getElementById("share-dialog-close"),
@@ -518,6 +529,7 @@ function bootstrapApp() {
     }
     state.isRevisionMode = shouldEnable;
     setTextColorPopover(false);
+    setClozeFilterMenu(false, { focusTarget: "none" });
 
     if (bodyElement) {
       bodyElement.classList.toggle("revision-mode", shouldEnable);
@@ -534,6 +546,10 @@ function bootstrapApp() {
 
     if (ui.revisionIterationBtn) {
       ui.revisionIterationBtn.disabled = !shouldEnable;
+    }
+
+    if (ui.clozeFilterBtn) {
+      ui.clozeFilterBtn.disabled = !hasNote;
     }
 
     if (headerElement) {
@@ -577,6 +593,7 @@ function bootstrapApp() {
     setToolbarMoreMenu(false);
     updateKeyboardVisibility();
     updateToolbarOffsets();
+    updateClozeVisibilityForFilter();
     return state.isRevisionMode;
   }
 
@@ -1430,6 +1447,10 @@ function bootstrapApp() {
 
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
+      if (isClozeFilterMenuOpen()) {
+        setClozeFilterMenu(false, { focusTarget: "button" });
+        return;
+      }
       if (isTextColorPopoverOpen()) {
         setTextColorPopover(false);
         return;
@@ -4075,6 +4096,141 @@ function bootstrapApp() {
     if (!ui.noteEditor) return;
     const clozes = ui.noteEditor.querySelectorAll(".cloze");
     clozes.forEach((cloze) => refreshClozeElement(cloze));
+    updateClozeVisibilityForFilter();
+  }
+
+  function getClozeFilterCheckboxes() {
+    if (!ui.clozeFilterMenu) {
+      return [];
+    }
+    return Array.from(
+      ui.clozeFilterMenu.querySelectorAll('input[type="checkbox"][data-priority]')
+    );
+  }
+
+  function syncClozeFilterMenuControls() {
+    const checkboxes = getClozeFilterCheckboxes();
+    if (!checkboxes.length) {
+      return;
+    }
+    const priorities = ensureVisibleClozePriorities();
+    const total = CLOZE_PRIORITY_VALUES.length;
+    const selected = priorities.size;
+    const allSelected = selected === total;
+    checkboxes.forEach((checkbox) => {
+      const value = checkbox.dataset.priority;
+      if (!value) {
+        return;
+      }
+      if (value === "all") {
+        checkbox.checked = allSelected;
+        checkbox.indeterminate = !allSelected && selected > 0;
+        return;
+      }
+      if (CLOZE_PRIORITY_VALUES.includes(value)) {
+        checkbox.checked = priorities.has(value);
+      }
+    });
+  }
+
+  function isClozeFilterMenuOpen() {
+    return Boolean(state.isClozeFilterMenuOpen);
+  }
+
+  function setClozeFilterMenu(open, options = {}) {
+    if (!ui.clozeFilterBtn || !ui.clozeFilterMenu) {
+      state.isClozeFilterMenuOpen = false;
+      return;
+    }
+    const shouldOpen = Boolean(open);
+    const focusTarget = options.focusTarget ?? (shouldOpen ? "first-option" : "button");
+    if (shouldOpen) {
+      ui.clozeFilterMenu.removeAttribute("hidden");
+    }
+    state.isClozeFilterMenuOpen = shouldOpen;
+    ui.clozeFilterBtn.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+    ui.clozeFilterMenu.setAttribute("aria-hidden", shouldOpen ? "false" : "true");
+    ui.clozeFilterMenu.classList.toggle("is-open", shouldOpen);
+    if (shouldOpen) {
+      syncClozeFilterMenuControls();
+      if (focusTarget === "menu") {
+        ui.clozeFilterMenu.focus();
+      } else if (focusTarget === "first-option") {
+        const firstOption = getClozeFilterCheckboxes()[0];
+        if (firstOption) {
+          firstOption.focus();
+        } else {
+          ui.clozeFilterMenu.focus();
+        }
+      }
+    } else {
+      ui.clozeFilterMenu.setAttribute("hidden", "");
+      if (focusTarget === "button") {
+        ui.clozeFilterBtn.focus();
+      }
+    }
+  }
+
+  function toggleClozeFilterMenu() {
+    setClozeFilterMenu(!isClozeFilterMenuOpen());
+  }
+
+  function handleClozeFilterChange(event) {
+    const target = event.target;
+    if (!target || target.type !== "checkbox") {
+      return;
+    }
+    const priority = target.dataset.priority;
+    if (!priority) {
+      return;
+    }
+    const priorities = ensureVisibleClozePriorities();
+    if (priority === "all") {
+      priorities.clear();
+      if (target.checked) {
+        CLOZE_PRIORITY_VALUES.forEach((value) => priorities.add(value));
+      }
+    } else if (CLOZE_PRIORITY_VALUES.includes(priority)) {
+      if (target.checked) {
+        priorities.add(priority);
+      } else {
+        priorities.delete(priority);
+      }
+    }
+    updateClozeVisibilityForFilter();
+  }
+
+  function handleClozeFilterMenuKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setClozeFilterMenu(false, { focusTarget: "button" });
+    }
+  }
+
+  function updateClozeVisibilityForFilter() {
+    const priorities = ensureVisibleClozePriorities();
+    const total = CLOZE_PRIORITY_VALUES.length;
+    const selected = priorities.size;
+    if (ui.clozeFilterBtn) {
+      const hasActiveFilter = selected !== total;
+      ui.clozeFilterBtn.classList.toggle("is-active", hasActiveFilter);
+      ui.clozeFilterBtn.setAttribute("aria-pressed", hasActiveFilter ? "true" : "false");
+    }
+    syncClozeFilterMenuControls();
+    if (!ui.noteEditor) {
+      return;
+    }
+    const shouldFilter = state.isRevisionMode;
+    const clozes = ui.noteEditor.querySelectorAll(".cloze");
+    clozes.forEach((cloze) => {
+      const priority = normalizeClozePriorityValue(getClozePriority(cloze));
+      const isVisible = !shouldFilter || priorities.has(priority);
+      cloze.classList.toggle("cloze-priority-hidden", !isVisible);
+    });
+    if (state.activeCloze && state.activeCloze.classList.contains("cloze-priority-hidden")) {
+      hideClozeFeedback();
+    }
   }
 
   function getPriorityFromHashCount(hashCount) {
@@ -4759,7 +4915,7 @@ function bootstrapApp() {
 
   function handleEditorClick(event) {
     const cloze = closestElement(event.target, ".cloze");
-    if (!cloze) {
+    if (!cloze || cloze.classList.contains("cloze-priority-hidden")) {
       hideClozeFeedback();
       return;
     }
@@ -4854,6 +5010,14 @@ function bootstrapApp() {
       const insideDropdown = targetNode && ui.clozeDropdown.contains(targetNode);
       if (!insideDropdown) {
         setClozeDropdown(false);
+      }
+    }
+
+    if (isClozeFilterMenuOpen() && ui.clozeFilterMenu) {
+      const insideFilter = targetNode && ui.clozeFilterMenu.contains(targetNode);
+      const onButton = targetNode && ui.clozeFilterBtn && ui.clozeFilterBtn.contains(targetNode);
+      if (!insideFilter && !onButton) {
+        setClozeFilterMenu(false, { focusTarget: "none" });
       }
     }
 
@@ -5524,6 +5688,19 @@ function bootstrapApp() {
           startNewIteration();
         }
       });
+    }
+    if (ui.clozeFilterBtn && ui.clozeFilterMenu) {
+      ui.clozeFilterBtn.addEventListener("click", () => {
+        toggleClozeFilterMenu();
+      });
+      ui.clozeFilterBtn.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown" && !isClozeFilterMenuOpen()) {
+          event.preventDefault();
+          setClozeFilterMenu(true);
+        }
+      });
+      ui.clozeFilterMenu.addEventListener("change", handleClozeFilterChange);
+      ui.clozeFilterMenu.addEventListener("keydown", handleClozeFilterMenuKeydown);
     }
     if (ui.shareButton) {
       ui.shareButton.addEventListener("click", () => {
