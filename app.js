@@ -4267,7 +4267,10 @@ function bootstrapApp() {
         if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
           delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
         }
-        if (hasManualOverride) {
+        if (isVisible) {
+          cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+          manualRevealSet.add(cloze);
+        } else if (hasManualOverride) {
           manualRevealSet.add(cloze);
         }
       }
