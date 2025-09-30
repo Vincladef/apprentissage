@@ -1960,6 +1960,149 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   color: var(--muted);
 }
 
+.cloze-feedback-hint {
+  --cloze-feedback-hint-shadow: rgba(26, 115, 232, 0.18);
+  margin-top: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.7rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  min-height: 1.4rem;
+  transition: background-color 0.3s ease, color 0.3s ease,
+    border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.cloze-feedback-hint:empty {
+  padding: 0;
+  min-height: 0;
+  margin-top: 0;
+  border-width: 0;
+}
+
+@keyframes clozeFeedbackHintPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: none;
+  }
+  40% {
+    transform: scale(1.015);
+    box-shadow: 0 0 0 4px var(--cloze-feedback-hint-shadow, rgba(26, 115, 232, 0.18));
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+
+.cloze-feedback-hint--success {
+  --cloze-feedback-hint-shadow: rgba(24, 128, 56, 0.18);
+  background: rgba(24, 128, 56, 0.12);
+  border-color: rgba(24, 128, 56, 0.35);
+  color: var(--success);
+  box-shadow: inset 0 0 0 1px rgba(24, 128, 56, 0.18);
+  animation: clozeFeedbackHintPulse 0.6s ease;
+}
+
+.cloze-feedback-hint--warning {
+  --cloze-feedback-hint-shadow: rgba(249, 171, 0, 0.22);
+  background: rgba(249, 171, 0, 0.18);
+  border-color: rgba(249, 171, 0, 0.4);
+  color: #a15b00;
+  box-shadow: inset 0 0 0 1px rgba(249, 171, 0, 0.22);
+  animation: clozeFeedbackHintPulse 0.6s ease;
+}
+
+.cloze-feedback-hint--error {
+  --cloze-feedback-hint-shadow: rgba(217, 48, 37, 0.22);
+  background: rgba(217, 48, 37, 0.18);
+  border-color: rgba(217, 48, 37, 0.4);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px rgba(217, 48, 37, 0.22);
+  animation: clozeFeedbackHintPulse 0.6s ease;
+}
+
+.cloze-feedback-hint--neutral {
+  --cloze-feedback-hint-shadow: rgba(26, 115, 232, 0.2);
+  background: rgba(26, 115, 232, 0.16);
+  border-color: rgba(26, 115, 232, 0.35);
+  color: #1a4bb5;
+  box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.2);
+  animation: clozeFeedbackHintPulse 0.6s ease;
+}
+
+@keyframes clozeFeedbackButtonPulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.cloze-feedback button.cloze-feedback-button--animate {
+  animation: clozeFeedbackButtonPulse 0.4s ease;
+}
+
+.cloze-feedback button.cloze-feedback-button--success {
+  background: rgba(24, 128, 56, 0.16);
+  border-color: rgba(24, 128, 56, 0.45);
+  color: var(--success);
+  box-shadow: inset 0 0 0 1px rgba(24, 128, 56, 0.22);
+}
+
+.cloze-feedback button.cloze-feedback-button--success span {
+  color: rgba(24, 128, 56, 0.9);
+}
+
+.cloze-feedback button.cloze-feedback-button--warning {
+  background: rgba(249, 171, 0, 0.22);
+  border-color: rgba(249, 171, 0, 0.5);
+  color: #a15b00;
+  box-shadow: inset 0 0 0 1px rgba(249, 171, 0, 0.24);
+}
+
+.cloze-feedback button.cloze-feedback-button--warning span {
+  color: rgba(161, 91, 0, 0.9);
+}
+
+.cloze-feedback button.cloze-feedback-button--error {
+  background: rgba(217, 48, 37, 0.2);
+  border-color: rgba(217, 48, 37, 0.55);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px rgba(217, 48, 37, 0.24);
+}
+
+.cloze-feedback button.cloze-feedback-button--error span {
+  color: rgba(217, 48, 37, 0.9);
+}
+
+.cloze-feedback button.cloze-feedback-button--neutral {
+  background: rgba(26, 115, 232, 0.18);
+  border-color: rgba(26, 115, 232, 0.45);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.22);
+}
+
+.cloze-feedback button.cloze-feedback-button--neutral span {
+  color: rgba(26, 115, 232, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloze-feedback-hint--success,
+  .cloze-feedback-hint--warning,
+  .cloze-feedback-hint--error,
+  .cloze-feedback-hint--neutral,
+  .cloze-feedback button.cloze-feedback-button--animate {
+    animation: none;
+  }
+}
+
 .empty-state {
   margin: auto;
   text-align: center;

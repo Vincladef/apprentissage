@@ -171,6 +171,26 @@ function bootstrapApp() {
     "cloze-status-neutral",
     "cloze-status-negative"
   ];
+  const CLOZE_FEEDBACK_HINT_STATE_MAP = {
+    yes: "success",
+    "rather-yes": "success",
+    neutral: "neutral",
+    "rather-no": "warning",
+    no: "error"
+  };
+  const CLOZE_FEEDBACK_HINT_STATE_CLASSES = [
+    "cloze-feedback-hint--success",
+    "cloze-feedback-hint--warning",
+    "cloze-feedback-hint--error",
+    "cloze-feedback-hint--neutral"
+  ];
+  const CLOZE_FEEDBACK_BUTTON_STATE_CLASSES = [
+    "cloze-feedback-button--success",
+    "cloze-feedback-button--warning",
+    "cloze-feedback-button--error",
+    "cloze-feedback-button--neutral"
+  ];
+  const CLOZE_FEEDBACK_BUTTON_ANIMATION_CLASS = "cloze-feedback-button--animate";
   const CLOZE_PRIORITY = {
     HIGH: "high",
     MEDIUM: "medium",
@@ -380,6 +400,7 @@ function bootstrapApp() {
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
     clozeFeedback: document.getElementById("cloze-feedback"),
+    clozeFeedbackHint: document.querySelector("#cloze-feedback .cloze-feedback-hint"),
     workspaceOverlay: document.getElementById("drawer-overlay"),
     mobileNotesBtn: document.getElementById("mobile-notes-btn"),
     toolbarMoreBtn: document.getElementById("toolbar-more-btn"),
@@ -4918,6 +4939,68 @@ function bootstrapApp() {
     }
   }
 
+  function resetClozeFeedbackButtons() {
+    if (!ui.clozeFeedback) return;
+    const feedbackButtons = ui.clozeFeedback.querySelectorAll("button[data-feedback]");
+    feedbackButtons.forEach((feedbackButton) => {
+      feedbackButton.classList.remove(CLOZE_FEEDBACK_BUTTON_ANIMATION_CLASS);
+      CLOZE_FEEDBACK_BUTTON_STATE_CLASSES.forEach((className) => {
+        feedbackButton.classList.remove(className);
+      });
+    });
+  }
+
+  function highlightClozeFeedbackButton(button, feedbackKey) {
+    if (!ui.clozeFeedback || !button) return;
+
+    const state = CLOZE_FEEDBACK_HINT_STATE_MAP[feedbackKey] || "neutral";
+    const stateClass = `cloze-feedback-button--${state}`;
+
+    const feedbackButtons = ui.clozeFeedback.querySelectorAll("button[data-feedback]");
+    feedbackButtons.forEach((feedbackButton) => {
+      feedbackButton.classList.remove(CLOZE_FEEDBACK_BUTTON_ANIMATION_CLASS);
+      CLOZE_FEEDBACK_BUTTON_STATE_CLASSES.forEach((className) => {
+        feedbackButton.classList.remove(className);
+      });
+    });
+
+    const handleAnimationEnd = () => {
+      button.classList.remove(CLOZE_FEEDBACK_BUTTON_ANIMATION_CLASS);
+      button.removeEventListener("animationend", handleAnimationEnd);
+      button.removeEventListener("animationcancel", handleAnimationEnd);
+    };
+
+    button.removeEventListener("animationend", handleAnimationEnd);
+    button.removeEventListener("animationcancel", handleAnimationEnd);
+    button.addEventListener("animationend", handleAnimationEnd);
+    button.addEventListener("animationcancel", handleAnimationEnd);
+
+    requestAnimationFrame(() => {
+      button.classList.add(stateClass);
+      button.classList.add(CLOZE_FEEDBACK_BUTTON_ANIMATION_CLASS);
+    });
+  }
+
+  function updateClozeFeedbackHint(message, feedbackKey) {
+    if (!ui.clozeFeedbackHint) return;
+
+    const state = CLOZE_FEEDBACK_HINT_STATE_MAP[feedbackKey] || "neutral";
+    const stateClass = `cloze-feedback-hint--${state}`;
+
+    if (ui.clozeFeedbackHint.textContent === message) {
+      ui.clozeFeedbackHint.textContent = "";
+    }
+
+    CLOZE_FEEDBACK_HINT_STATE_CLASSES.forEach((className) => {
+      ui.clozeFeedbackHint.classList.remove(className);
+    });
+
+    requestAnimationFrame(() => {
+      ui.clozeFeedbackHint.textContent = message;
+      ui.clozeFeedbackHint.classList.add(stateClass);
+    });
+  }
+
   function hideClozeFeedback() {
     if (ui.clozeFeedback) {
       ui.clozeFeedback.classList.add("hidden");
@@ -4954,6 +5037,7 @@ function bootstrapApp() {
 
   function showClozeFeedback(target) {
     if (!ui.clozeFeedback || !target) return;
+    resetClozeFeedbackButtons();
     state.activeCloze = target;
     target.classList.add("cloze-revealed");
     ui.clozeFeedback.classList.remove("hidden");
@@ -5057,14 +5141,22 @@ function bootstrapApp() {
     const appliedPoints = setClozePoints(cloze, delay);
     refreshClozeElement(cloze);
     handleEditorInput({ bypassReadOnly: true });
-    hideClozeFeedback();
 
     const label = feedback.label || button.textContent.trim();
     const toastType = feedback.toastType || "info";
     const nextReview = appliedPoints + 1;
     const suffix = nextReview > 1 ? "s" : "";
     const counterMessage = `Reviendra dans ${nextReview} itération${suffix}`;
+    const hintMessage = `Réapparition dans ${nextReview} itération${suffix}`;
+
+    updateClozeFeedbackHint(hintMessage, feedbackKey);
+    highlightClozeFeedbackButton(button, feedbackKey);
+
     showToast(`Auto-évaluation : ${label} • ${counterMessage}`, toastType);
+
+    requestAnimationFrame(() => {
+      hideClozeFeedback();
+    });
   }
 
   function handleDocumentClick(event) {
