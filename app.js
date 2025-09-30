@@ -4956,10 +4956,18 @@ function bootstrapApp() {
 
     const wasMasked = cloze.classList.contains("cloze-masked");
     const manualRevealSet = getManualRevealSet();
+    const hasPriorityManualReveal =
+      cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
+    const hasDeferredReveal =
+      cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1" ||
+      cloze.dataset.defer === "1";
+
     if (wasMasked) {
       manualRevealSet.add(cloze);
       cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
       refreshClozeElement(cloze);
+    } else if (hasPriorityManualReveal || hasDeferredReveal) {
+      manualRevealSet.add(cloze);
     }
 
     const isManuallyRevealed = manualRevealSet.has(cloze);
