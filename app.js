@@ -4246,14 +4246,8 @@ function bootstrapApp() {
         cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
       const hasDeferredReveal = cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1";
       const hasPositivePoints = getClozePoints(cloze) > 0;
-      const isInManualRevealSet = manualRevealSet.has(cloze);
-      const hasManualOverride =
-        hasManualRevealAttr ||
-        hasPriorityManualReveal ||
-        hasDeferredReveal ||
-        hasPositivePoints ||
-        isInManualRevealSet;
-      const shouldHideForPriority = !isVisible && !hasManualOverride;
+      const hasSpacedRepetitionOverride = hasDeferredReveal || hasPositivePoints;
+      const shouldHideForPriority = !isVisible && !hasSpacedRepetitionOverride;
 
       if (shouldHideForPriority) {
         cloze.classList.add("cloze-priority-hidden");
@@ -4270,11 +4264,20 @@ function bootstrapApp() {
         if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
           delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
         }
-        if (hasManualOverride) {
+        const hasSessionRevealMarker =
+          hasManualRevealAttr || hasPriorityManualReveal;
+        const shouldTrackManualReveal = isVisible || hasSessionRevealMarker;
+
+        if (shouldTrackManualReveal) {
           manualRevealSet.add(cloze);
+          if (isVisible && !hasSessionRevealMarker) {
+            cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+          }
         } else {
-          cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
-          manualRevealSet.add(cloze);
+          manualRevealSet.delete(cloze);
+          if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+            delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+          }
         }
       }
       refreshClozeElement(cloze);
