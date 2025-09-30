@@ -1733,8 +1733,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .editor .cloze.cloze-priority-hidden {
-  pointer-events: none;
-  cursor: not-allowed;
+  pointer-events: auto;
+  cursor: pointer;
   opacity: 0.45;
 }
 
@@ -1756,7 +1756,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   border-color: #000000;
 }
 
-.editor .cloze:not(.cloze-masked) {
+.editor .cloze:not(.cloze-masked):not(.cloze-priority-hidden) {
   cursor: text;
   color: var(--fg);
   background: #ffffff;
