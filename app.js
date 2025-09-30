@@ -4237,12 +4237,26 @@ function bootstrapApp() {
       return;
     }
     const clozes = ui.noteEditor.querySelectorAll(".cloze");
+    const manualRevealSet = getManualRevealSet();
     clozes.forEach((cloze) => {
       const priority = normalizeClozePriorityValue(getClozePriority(cloze));
       const isVisible = priorities.has(priority);
-      const isPriorityHidden = !isVisible;
-      cloze.classList.toggle("cloze-priority-hidden", isPriorityHidden);
-      if (isPriorityHidden) {
+      const hasManualRevealAttr = cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1";
+      const hasPriorityManualReveal =
+        cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
+      const hasDeferredReveal = cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1";
+      const hasPositivePoints = getClozePoints(cloze) > 0;
+      const isInManualRevealSet = manualRevealSet.has(cloze);
+      const hasManualOverride =
+        hasManualRevealAttr ||
+        hasPriorityManualReveal ||
+        hasDeferredReveal ||
+        hasPositivePoints ||
+        isInManualRevealSet;
+      const shouldHideForPriority = !isVisible && !hasManualOverride;
+
+      if (shouldHideForPriority) {
+        cloze.classList.add("cloze-priority-hidden");
         cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] = "1";
         if (cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY]) {
           delete cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
@@ -4250,13 +4264,18 @@ function bootstrapApp() {
         if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
           delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
         }
-        getManualRevealSet().delete(cloze);
+        manualRevealSet.delete(cloze);
       } else {
+        cloze.classList.remove("cloze-priority-hidden");
         if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
           delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
         }
-        cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
-        getManualRevealSet().add(cloze);
+        if (hasManualOverride) {
+          manualRevealSet.add(cloze);
+        } else {
+          cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+          manualRevealSet.add(cloze);
+        }
       }
       refreshClozeElement(cloze);
     });
@@ -4519,6 +4538,9 @@ function bootstrapApp() {
 
     clozes.forEach((cloze) => {
       delete cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
+      if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+        delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+      }
       if (cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY]) {
         delete cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY];
       }
