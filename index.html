@@ -153,15 +153,69 @@
               </button>
             </div>
             <div class="toolbar-group toolbar-group--actions" role="group" aria-label="Outils d'apprentissage">
-              <button
-                type="button"
-                class="toolbar-button"
-                data-action="createCloze"
-                title="Créer un texte à trous"
-              >
-                <span class="icon" aria-hidden="true">⧉</span>
-                <span class="sr-only">Créer un texte à trous</span>
-              </button>
+              <div class="toolbar-dropdown" id="cloze-priority-dropdown">
+                <button
+                  type="button"
+                  class="toolbar-button toolbar-dropdown-main"
+                  data-action="createCloze"
+                  data-priority="medium"
+                  title="Créer un texte à trous (priorité moyenne)"
+                >
+                  <span class="icon" aria-hidden="true">⧉</span>
+                  <span class="sr-only">Créer un texte à trous (priorité moyenne)</span>
+                </button>
+                <button
+                  type="button"
+                  class="toolbar-button toolbar-dropdown-toggle"
+                  id="cloze-priority-toggle"
+                  data-action="toggleClozeDropdown"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  aria-controls="cloze-priority-menu"
+                  title="Choisir la priorité du texte à trous"
+                >
+                  <span class="icon" aria-hidden="true">▾</span>
+                  <span class="sr-only">Choisir la priorité du texte à trous</span>
+                </button>
+                <div
+                  class="toolbar-dropdown-menu"
+                  id="cloze-priority-menu"
+                  role="menu"
+                  aria-label="Choisir la priorité du texte à trous"
+                  hidden
+                >
+                  <button
+                    type="button"
+                    class="toolbar-dropdown-item"
+                    data-action="createCloze"
+                    data-priority="high"
+                    role="menuitem"
+                  >
+                    <span class="toolbar-dropdown-item-icon" aria-hidden="true"></span>
+                    <span>Priorité haute</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="toolbar-dropdown-item"
+                    data-action="createCloze"
+                    data-priority="medium"
+                    role="menuitem"
+                  >
+                    <span class="toolbar-dropdown-item-icon" aria-hidden="true"></span>
+                    <span>Priorité moyenne</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="toolbar-dropdown-item"
+                    data-action="createCloze"
+                    data-priority="low"
+                    role="menuitem"
+                  >
+                    <span class="toolbar-dropdown-item-icon" aria-hidden="true"></span>
+                    <span>Priorité basse</span>
+                  </button>
+                </div>
+              </div>
               <button
                 type="button"
                 class="toolbar-button"
