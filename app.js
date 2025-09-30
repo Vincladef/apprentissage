@@ -4254,7 +4254,11 @@ function bootstrapApp() {
           }
           getManualRevealSet().delete(cloze);
         } else {
-          delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+          if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
+            delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+          }
+          cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+          getManualRevealSet().add(cloze);
         }
         refreshClozeElement(cloze);
       } else {
