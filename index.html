@@ -438,11 +438,43 @@
               <div id="cloze-feedback" class="cloze-feedback hidden" role="dialog" aria-modal="false">
                 <p class="cloze-feedback-title">As-tu trouvé la réponse&nbsp;?</p>
                 <div class="cloze-feedback-options">
-                  <button type="button" data-feedback="yes">✅ Oui<br /><span>Réponse facile</span></button>
-                  <button type="button" data-feedback="rather-yes">🙂 Plutôt oui<br /><span>Quelques hésitations</span></button>
-                  <button type="button" data-feedback="neutral">😐 Neutre<br /><span>À revoir</span></button>
-                  <button type="button" data-feedback="rather-no">🤔 Plutôt non<br /><span>Erreur partielle</span></button>
-                  <button type="button" data-feedback="no">❌ Non<br /><span>Réponse incorrecte</span></button>
+                  <div
+                    class="cloze-feedback-column cloze-feedback-evaluation"
+                    role="group"
+                    aria-label="Auto-évaluation"
+                  >
+                    <button type="button" data-feedback="yes">
+                      ✅ Oui<br /><span>Réponse facile</span>
+                    </button>
+                    <button type="button" data-feedback="rather-yes">
+                      🙂 Plutôt oui<br /><span>Quelques hésitations</span>
+                    </button>
+                    <button type="button" data-feedback="neutral">
+                      😐 Neutre<br /><span>À revoir</span>
+                    </button>
+                    <button type="button" data-feedback="rather-no">
+                      🤔 Plutôt non<br /><span>Erreur partielle</span>
+                    </button>
+                    <button type="button" data-feedback="no">
+                      ❌ Non<br /><span>Réponse incorrecte</span>
+                    </button>
+                  </div>
+                  <div
+                    class="cloze-feedback-column cloze-feedback-priority"
+                    role="group"
+                    aria-label="Priorité de révision"
+                  >
+                    <p class="cloze-feedback-subtitle">Priorité de révision</p>
+                    <button type="button" data-priority="high">
+                      🚀 Haute<br /><span>À revoir en premier</span>
+                    </button>
+                    <button type="button" data-priority="medium">
+                      ⚖️ Moyenne<br /><span>Suivre le rythme</span>
+                    </button>
+                    <button type="button" data-priority="low">
+                      🌙 Basse<br /><span>Moins urgente</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
