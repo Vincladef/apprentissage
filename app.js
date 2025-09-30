@@ -649,10 +649,17 @@ function bootstrapApp() {
   }
 
   function closestElement(target, selector) {
-    if (!target || typeof target.closest !== "function") {
+    let element = target;
+
+    while (element && typeof element.closest !== "function") {
+      element = element.parentElement;
+    }
+
+    if (!element) {
       return null;
     }
-    return target.closest(selector);
+
+    return element.closest(selector);
   }
 
   function setNotesButtonLabel(label) {
