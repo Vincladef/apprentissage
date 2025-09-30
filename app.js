@@ -102,9 +102,34 @@ function bootstrapApp() {
   const DEFAULT_FONT_FAMILY = "Arial";
   const FONT_SIZE_STEPS = [10, 11, 12, 14, 18, 24, 32];
   const DEFAULT_FONT_SIZE_INDEX = 1;
+  const TEXT_COLOR_PRESETS = [
+    { value: "#0f172a", label: "Bleu nuit" },
+    { value: "#1f2937", label: "Gris anthracite" },
+    { value: "#374151", label: "Ardoise" },
+    { value: "#4b5563", label: "Gris acier" },
+    { value: "#6b7280", label: "Gris moyen" },
+    { value: "#9ca3af", label: "Gris clair" },
+    { value: "#ef4444", label: "Rouge vif" },
+    { value: "#f97316", label: "Orange" },
+    { value: "#f59e0b", label: "Ambre" },
+    { value: "#facc15", label: "Jaune" },
+    { value: "#22c55e", label: "Vert" },
+    { value: "#16a34a", label: "Vert forêt" },
+    { value: "#0ea5e9", label: "Bleu ciel" },
+    { value: "#2563eb", label: "Bleu roi" },
+    { value: "#1d4ed8", label: "Bleu profond" },
+    { value: "#7c3aed", label: "Violet" },
+    { value: "#ec4899", label: "Rose" },
+    { value: "#f43f5e", label: "Framboise" },
+    { value: "#14b8a6", label: "Turquoise" },
+    { value: "#10b981", label: "Émeraude" },
+  ];
   const IMAGE_RESIZE_MIN_WIDTH = 80;
+  const IMAGE_RESIZE_MIN_HEIGHT = 80;
   const IMAGE_RESIZE_KEYBOARD_STEP = 10;
   const IMAGE_RESIZE_KEYBOARD_STEP_LARGE = 40;
+  const IMAGE_CROP_MIN_SIZE = 24;
+  const IMAGE_HANDLE_DIRECTIONS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
   const CLOZE_PLACEHOLDER_TEXT = "[ … ]";
   const CLOZE_FEEDBACK_RULES = {
     yes: {
@@ -244,6 +269,8 @@ function bootstrapApp() {
     hasUnsavedChanges: false,
     lastSavedAt: null,
     fontSizeIndex: DEFAULT_FONT_SIZE_INDEX,
+    textColor: DEFAULT_TEXT_COLOR,
+    isTextColorPopoverOpen: false,
     activeCloze: null,
     pendingRemoteNote: null,
     isEditorFocused: false,
@@ -258,13 +285,29 @@ function bootstrapApp() {
     wrapper: null,
     img: null,
     handle: null,
+    handleDirection: null,
     startX: 0,
+    startY: 0,
     startWidth: 0,
+    startHeight: 0,
     editorWidth: 0,
     hasChanges: false,
     savedSelection: null,
   };
+  const imageCropState = {
+    isActive: false,
+    pointerId: null,
+    wrapper: null,
+    img: null,
+    overlay: null,
+    rect: null,
+    startX: 0,
+    startY: 0,
+    lastRect: null,
+    savedSelection: null,
+  };
   let isImageResizeActive = false;
+  let activeImageWrapper = null;
 
   function getManualRevealSet() {
     if (!state[CLOZE_MANUAL_REVEAL_SET_KEY]) {
@@ -302,6 +345,10 @@ function bootstrapApp() {
     emptyState: document.getElementById("empty-note"),
     toast: document.getElementById("toast"),
     toolbar: document.querySelector(".editor-toolbar"),
+    textColorButton: document.querySelector('button[data-action="applyTextColor"]'),
+    textColorPopover: document.getElementById("text-color-popover"),
+    textColorOptions: document.getElementById("text-color-options"),
+    textColorCustomInput: document.getElementById("text-color-custom-input"),
     blockFormat: document.getElementById("block-format"),
     fontFamily: document.getElementById("font-family"),
     fontSizeValue: document.getElementById("font-size-value"),
@@ -454,6 +501,7 @@ function bootstrapApp() {
       showToast("Ouvrez une fiche pour activer le mode révision.", "info");
     }
     state.isRevisionMode = shouldEnable;
+    setTextColorPopover(false);
 
     if (bodyElement) {
       bodyElement.classList.toggle("revision-mode", shouldEnable);
@@ -600,6 +648,7 @@ function bootstrapApp() {
   }
 
   function showView(name) {
+    setTextColorPopover(false);
     Object.entries(views).forEach(([key, section]) => {
       if (!section) return;
       section.classList.toggle("active", key === name);
@@ -1365,6 +1414,10 @@ function bootstrapApp() {
 
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
+      if (isTextColorPopoverOpen()) {
+        setTextColorPopover(false);
+        return;
+      }
       if (document.body.classList.contains("notes-drawer-open")) {
         setNotesDrawer(false);
         return;
@@ -1466,6 +1519,7 @@ function bootstrapApp() {
 
   function setToolbarMoreMenu(open) {
     if (!ui.toolbarMoreBtn || !ui.toolbarMorePanel) return;
+    setTextColorPopover(false);
     if (!mobileMediaQuery.matches) {
       ui.toolbarMorePanel.classList.remove("is-open");
       ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
@@ -1589,8 +1643,10 @@ function bootstrapApp() {
       }
     });
     container
-      .querySelectorAll(".editor-image__handle")
-      .forEach((handle) => handle.remove());
+      .querySelectorAll(
+        ".editor-image__handle, .editor-image__selection, .editor-image__crop-overlay"
+      )
+      .forEach((element) => element.remove());
     container.querySelectorAll(".editor-image").forEach((wrapper) => {
       unwrapEditorImage(wrapper);
     });
@@ -1644,6 +1700,7 @@ function bootstrapApp() {
     }
   }
 
+
   function getEditorContentWidth() {
     if (!ui.noteEditor) {
       return 0;
@@ -1652,110 +1709,541 @@ function bootstrapApp() {
     return rect && typeof rect.width === "number" ? rect.width : 0;
   }
 
-  function applyImageWidth(wrapper, img, widthPx) {
-    if (!wrapper || !img) return;
-    const editorWidth = getEditorContentWidth();
-    const minWidth = IMAGE_RESIZE_MIN_WIDTH;
-    let resolved = Number(widthPx);
-    if (!Number.isFinite(resolved) || resolved <= 0) {
-      resolved = minWidth;
+  function applyImageDimensions(wrapper, img, widthPx, heightPx) {
+    if (!wrapper || !img) return { width: 0, height: 0 };
+
+    const rect = img.getBoundingClientRect();
+    const naturalRatio =
+      img.naturalWidth > 0 && img.naturalHeight > 0
+        ? img.naturalHeight / img.naturalWidth
+        : rect.width > 0 && rect.height > 0
+          ? rect.height / rect.width
+          : null;
+
+    const hasWidthArg = Number.isFinite(widthPx);
+    const hasHeightArg = Number.isFinite(heightPx);
+
+    let resolvedWidth = hasWidthArg ? Number(widthPx) : parseFloat(img.style.width);
+    if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+      resolvedWidth = rect.width || img.naturalWidth || IMAGE_RESIZE_MIN_WIDTH;
     }
-    let maxWidth = editorWidth > 0 ? editorWidth : resolved;
-    if (!Number.isFinite(maxWidth) || maxWidth < minWidth) {
-      maxWidth = minWidth;
-    }
-    const clamped = Math.max(minWidth, Math.min(resolved, maxWidth));
-    const rounded = Math.round(clamped);
-    img.style.width = `${rounded}px`;
+    resolvedWidth = Math.max(IMAGE_RESIZE_MIN_WIDTH, resolvedWidth);
+    const roundedWidth = Math.round(resolvedWidth);
+    img.style.width = `${roundedWidth}px`;
     wrapper.dataset.width = img.style.width;
-    wrapper.dataset.widthPx = String(rounded);
+    wrapper.dataset.widthPx = String(roundedWidth);
+
+    let resolvedHeight = hasHeightArg ? Number(heightPx) : parseFloat(img.style.height);
+    if (!Number.isFinite(resolvedHeight) || resolvedHeight <= 0) {
+      if (hasHeightArg) {
+        resolvedHeight = rect.height || img.naturalHeight || IMAGE_RESIZE_MIN_HEIGHT;
+      } else if (rect.height > 0) {
+        resolvedHeight = rect.height;
+      } else if (naturalRatio) {
+        resolvedHeight = roundedWidth * naturalRatio;
+      } else if (img.naturalHeight > 0) {
+        resolvedHeight = img.naturalHeight;
+      } else {
+        resolvedHeight = IMAGE_RESIZE_MIN_HEIGHT;
+      }
+    }
+    if (hasHeightArg) {
+      resolvedHeight = Math.max(IMAGE_RESIZE_MIN_HEIGHT, resolvedHeight);
+      const roundedHeight = Math.round(resolvedHeight);
+      img.style.height = `${roundedHeight}px`;
+    }
+    if (img.style.height) {
+      const numericHeight = parseFloat(img.style.height);
+      if (Number.isFinite(numericHeight)) {
+        wrapper.dataset.height = img.style.height;
+        wrapper.dataset.heightPx = String(Math.round(Math.max(numericHeight, IMAGE_RESIZE_MIN_HEIGHT)));
+        resolvedHeight = numericHeight;
+      } else {
+        delete wrapper.dataset.height;
+        delete wrapper.dataset.heightPx;
+      }
+    } else {
+      delete wrapper.dataset.height;
+      delete wrapper.dataset.heightPx;
+    }
+
+    const editorWidth = getEditorContentWidth();
     if (editorWidth > 0) {
-      const percent = Math.round((rounded / editorWidth) * 100);
+      const percent = Math.round((roundedWidth / editorWidth) * 100);
       const clampedPercent = Math.max(1, Math.min(100, percent));
       wrapper.dataset.widthPercent = String(clampedPercent);
     } else {
       delete wrapper.dataset.widthPercent;
     }
+
+    return { width: roundedWidth, height: Math.round(resolvedHeight) };
   }
 
-  function updateImageHandleAccessibility(wrapper, img, handle) {
-    if (!handle || !img) return;
-    const editorWidth = getEditorContentWidth();
+  function updateImageHandleAccessibility(wrapper, img) {
+    if (!wrapper || !img) return;
+    const handles = Array.from(wrapper.querySelectorAll('.editor-image__handle'));
+    if (!handles.length) return;
+
     const rect = img.getBoundingClientRect();
-    const rectWidth = rect && typeof rect.width === "number" ? rect.width : 0;
-    const styleWidth = parseFloat(img.style.width);
-    const width = rectWidth || (Number.isFinite(styleWidth) ? styleWidth : 0);
-    if (width > 0) {
-      const rounded = Math.round(width);
-      const parts = [`${rounded} pixels`];
-      if (editorWidth > 0) {
-        const percent = Math.round((rounded / editorWidth) * 100);
-        const clampedPercent = Math.max(1, Math.min(100, percent));
-        handle.setAttribute("aria-valuemin", "10");
-        handle.setAttribute("aria-valuemax", "100");
-        handle.setAttribute("aria-valuenow", String(clampedPercent));
-        handle.setAttribute(
-          "aria-valuetext",
-          `${rounded} pixels (${clampedPercent} %)`
-        );
-        parts.push(`${clampedPercent} %`);
+    const width = Math.round(rect.width || parseFloat(img.style.width) || 0);
+    const height = Math.round(rect.height || parseFloat(img.style.height) || 0);
+    const editorWidth = getEditorContentWidth();
+    const widthPercent = editorWidth > 0 && width > 0 ? Math.round((width / editorWidth) * 100) : null;
+
+    handles.forEach((handle) => {
+      const direction = handle.dataset.handle || '';
+      const controlsWidth = direction.includes('e') || direction.includes('w');
+      const controlsHeight = direction.includes('n') || direction.includes('s');
+      const controlsBoth = controlsWidth && controlsHeight;
+
+      if (controlsHeight && !controlsWidth) {
+        handle.setAttribute('aria-orientation', 'vertical');
       } else {
-        handle.removeAttribute("aria-valuemin");
-        handle.removeAttribute("aria-valuemax");
-        handle.removeAttribute("aria-valuenow");
-        handle.removeAttribute("aria-valuetext");
+        handle.setAttribute('aria-orientation', 'horizontal');
       }
-      const label = `Redimensionner l'image (${parts.join(" · ")})`;
-      handle.setAttribute("aria-label", label);
-      handle.setAttribute("title", label);
-    } else {
-      handle.setAttribute("aria-label", "Redimensionner l'image");
-      handle.setAttribute("title", "Redimensionner l'image");
-      handle.removeAttribute("aria-valuemin");
-      handle.removeAttribute("aria-valuemax");
-      handle.removeAttribute("aria-valuenow");
-      handle.removeAttribute("aria-valuetext");
-    }
+
+      const parts = [];
+      if (width > 0) {
+        if (widthPercent !== null) {
+          const clampedPercent = Math.max(1, Math.min(100, widthPercent));
+          parts.push(`${width} px (${clampedPercent} % largeur)`);
+        } else {
+          parts.push(`${width} px de largeur`);
+        }
+      }
+      if (controlsHeight || controlsBoth) {
+        if (height > 0) {
+          parts.push(`${height} px de hauteur`);
+        }
+      }
+
+      let label = "Redimensionner l'image";
+      if (controlsBoth) {
+        label = "Redimensionner la largeur et la hauteur de l'image";
+      } else if (controlsWidth) {
+        label = "Redimensionner la largeur de l'image";
+      } else if (controlsHeight) {
+        label = "Redimensionner la hauteur de l'image";
+      }
+      if (parts.length) {
+        const text = `${label} (${parts.join(' · ')})`;
+        handle.setAttribute('aria-label', text);
+        handle.setAttribute('title', text);
+        handle.setAttribute('aria-valuetext', parts.join(' · '));
+      } else {
+        handle.setAttribute('aria-label', label);
+        handle.setAttribute('title', label);
+        handle.removeAttribute('aria-valuetext');
+      }
+
+      if (controlsHeight && !controlsWidth) {
+        handle.setAttribute('aria-valuemin', String(IMAGE_RESIZE_MIN_HEIGHT));
+        if (height > 0) {
+          handle.setAttribute('aria-valuemax', String(Math.max(height, IMAGE_RESIZE_MIN_HEIGHT)));
+          handle.setAttribute('aria-valuenow', String(height));
+        } else {
+          handle.removeAttribute('aria-valuemax');
+          handle.removeAttribute('aria-valuenow');
+        }
+      } else {
+        const minValue = editorWidth > 0 ? 1 : IMAGE_RESIZE_MIN_WIDTH;
+        handle.setAttribute('aria-valuemin', String(minValue));
+        if (widthPercent !== null) {
+          const clampedPercent = Math.max(1, Math.min(100, widthPercent));
+          handle.setAttribute('aria-valuemax', '100');
+          handle.setAttribute('aria-valuenow', String(clampedPercent));
+        } else if (width > 0) {
+          handle.setAttribute('aria-valuemax', String(Math.max(width, IMAGE_RESIZE_MIN_WIDTH)));
+          handle.setAttribute('aria-valuenow', String(width));
+        } else {
+          handle.removeAttribute('aria-valuemax');
+          handle.removeAttribute('aria-valuenow');
+        }
+      }
+    });
   }
 
-  function ensureImageHandle(wrapper, img) {
+  function ensureImageSelectionElements(wrapper, img) {
     if (!wrapper || !img) return null;
-    let handle = wrapper.querySelector(".editor-image__handle");
-    if (!handle) {
-      handle = document.createElement("span");
-      handle.className = "editor-image__handle";
-      handle.tabIndex = 0;
-      handle.setAttribute("role", "slider");
-      handle.setAttribute("aria-orientation", "horizontal");
-      handle.setAttribute("contenteditable", "false");
-      handle.setAttribute("draggable", "false");
-      handle.dataset.editorImageHandle = "true";
-      wrapper.appendChild(handle);
+    let selection = wrapper.querySelector('.editor-image__selection');
+    if (!selection) {
+      selection = document.createElement('span');
+      selection.className = 'editor-image__selection';
+      selection.dataset.editorImageSelection = 'true';
+      selection.setAttribute('contenteditable', 'false');
+      selection.setAttribute('aria-hidden', 'true');
+      wrapper.appendChild(selection);
     }
-    updateImageHandleAccessibility(wrapper, img, handle);
-    return handle;
+
+    IMAGE_HANDLE_DIRECTIONS.forEach((direction) => {
+      let handle = selection.querySelector(`.editor-image__handle[data-handle="${direction}"]`);
+      if (!handle) {
+        handle = document.createElement('span');
+        handle.className = `editor-image__handle editor-image__handle--${direction}`;
+        handle.dataset.handle = direction;
+        handle.dataset.editorImageHandle = 'true';
+        handle.tabIndex = 0;
+        handle.setAttribute('role', 'slider');
+        handle.setAttribute('contenteditable', 'false');
+        handle.setAttribute('draggable', 'false');
+        selection.appendChild(handle);
+      }
+    });
+
+    updateImageHandleAccessibility(wrapper, img);
+    return selection;
+  }
+
+  function ensureCropOverlay(wrapper) {
+    if (!wrapper) return null;
+    let overlay = wrapper.querySelector('.editor-image__crop-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'editor-image__crop-overlay';
+      overlay.setAttribute('data-editor-image-crop-overlay', 'true');
+      overlay.setAttribute('hidden', 'hidden');
+      overlay.tabIndex = -1;
+
+      const rect = document.createElement('div');
+      rect.className = 'editor-image__crop-rect';
+      rect.setAttribute('hidden', 'hidden');
+      overlay.appendChild(rect);
+
+      const instructions = document.createElement('div');
+      instructions.className = 'editor-image__crop-instructions';
+      instructions.textContent = 'Glissez pour définir la zone à conserver. Entrée pour valider, Échap pour annuler.';
+      overlay.appendChild(instructions);
+
+      overlay.addEventListener('pointerdown', handleImageCropPointerDown);
+      overlay.addEventListener('pointermove', handleImageCropPointerMove);
+      overlay.addEventListener('pointerup', handleImageCropPointerUp);
+      overlay.addEventListener('pointercancel', handleImageCropPointerCancel);
+    }
+    return overlay;
   }
 
   function unwrapEditorImage(wrapper) {
     if (!wrapper || !wrapper.parentNode) return;
+    if (activeImageWrapper === wrapper) {
+      activeImageWrapper = null;
+    }
     while (wrapper.firstChild) {
       wrapper.parentNode.insertBefore(wrapper.firstChild, wrapper);
     }
     wrapper.remove();
   }
 
+  function selectEditorImage(wrapper) {
+    if (!wrapper) return;
+    if (activeImageWrapper && activeImageWrapper !== wrapper) {
+      activeImageWrapper.classList.remove('editor-image--selected');
+    }
+    activeImageWrapper = wrapper;
+    wrapper.classList.add('editor-image--selected');
+    const img = wrapper.querySelector('img');
+    if (img) {
+      ensureImageSelectionElements(wrapper, img);
+      updateImageHandleAccessibility(wrapper, img);
+    }
+  }
+
+  function deselectEditorImage() {
+    if (imageCropState.isActive) {
+      exitImageCropMode({ cancel: true });
+    }
+    if (activeImageWrapper) {
+      activeImageWrapper.classList.remove('editor-image--selected');
+    }
+    activeImageWrapper = null;
+  }
+
+  function resetImageResizeState() {
+    imageResizeState.pointerId = null;
+    imageResizeState.wrapper = null;
+    imageResizeState.img = null;
+    imageResizeState.handle = null;
+    imageResizeState.handleDirection = null;
+    imageResizeState.startX = 0;
+    imageResizeState.startY = 0;
+    imageResizeState.startWidth = 0;
+    imageResizeState.startHeight = 0;
+    imageResizeState.editorWidth = 0;
+    imageResizeState.hasChanges = false;
+    imageResizeState.savedSelection = null;
+    isImageResizeActive = false;
+  }
+
+  function resetImageCropState() {
+    imageCropState.isActive = false;
+    imageCropState.pointerId = null;
+    imageCropState.wrapper = null;
+    imageCropState.img = null;
+    imageCropState.overlay = null;
+    imageCropState.rect = null;
+    imageCropState.startX = 0;
+    imageCropState.startY = 0;
+    imageCropState.lastRect = null;
+    imageCropState.savedSelection = null;
+  }
+
+  function exitImageCropMode(options = {}) {
+    const { cancel = false } = options;
+    if (!imageCropState.isActive) {
+      resetImageCropState();
+      return;
+    }
+    const { overlay, wrapper, rect, pointerId } = imageCropState;
+    if (overlay) {
+      overlay.removeAttribute('data-active');
+      overlay.setAttribute('hidden', 'hidden');
+      if (typeof overlay.releasePointerCapture === 'function' && pointerId !== null) {
+        try {
+          overlay.releasePointerCapture(pointerId);
+        } catch (error) {}
+      }
+      overlay.classList.remove('is-dragging');
+    }
+    if (rect) {
+      rect.setAttribute('hidden', 'hidden');
+      rect.style.width = '0px';
+      rect.style.height = '0px';
+    }
+    if (wrapper) {
+      wrapper.classList.remove('editor-image--cropping');
+    }
+    const savedSelection = cloneSelectionInfo(imageCropState.savedSelection);
+    resetImageCropState();
+    if (cancel && savedSelection) {
+      state.savedSelection = savedSelection;
+    }
+  }
+
+  function enterImageCropMode(wrapper, img) {
+    if (!wrapper || !img) return;
+    if (imageCropState.isActive && imageCropState.wrapper === wrapper) {
+      return;
+    }
+    if (imageCropState.isActive) {
+      exitImageCropMode({ cancel: true });
+    }
+
+    const overlay = ensureCropOverlay(wrapper);
+    if (!overlay) return;
+    const rectElement = overlay.querySelector('.editor-image__crop-rect');
+
+    overlay.removeAttribute('hidden');
+    overlay.dataset.active = 'true';
+    wrapper.classList.add('editor-image--cropping');
+    selectEditorImage(wrapper);
+
+    imageCropState.isActive = true;
+    imageCropState.pointerId = null;
+    imageCropState.wrapper = wrapper;
+    imageCropState.img = img;
+    imageCropState.overlay = overlay;
+    imageCropState.rect = rectElement;
+    imageCropState.startX = 0;
+    imageCropState.startY = 0;
+    imageCropState.lastRect = null;
+    imageCropState.savedSelection = cloneSelectionInfo(state.savedSelection);
+
+    if (rectElement) {
+      rectElement.setAttribute('hidden', 'hidden');
+      rectElement.style.width = '0px';
+      rectElement.style.height = '0px';
+    }
+
+    if (typeof overlay.focus === 'function') {
+      overlay.focus({ preventScroll: true });
+    }
+  }
+
+  function updateCropPreview(rectElement, overlay, img, rect) {
+    if (!rectElement || !overlay || !img || !rect) return;
+    const currentSrc = img.currentSrc || img.src || '';
+    rectElement.removeAttribute('hidden');
+    rectElement.style.left = `${rect.left}px`;
+    rectElement.style.top = `${rect.top}px`;
+    rectElement.style.width = `${rect.width}px`;
+    rectElement.style.height = `${rect.height}px`;
+    if (currentSrc) {
+      rectElement.style.backgroundImage = `url("${currentSrc}")`;
+      rectElement.style.backgroundSize = `${overlay.clientWidth}px ${overlay.clientHeight}px`;
+      rectElement.style.backgroundPosition = `-${rect.left}px -${rect.top}px`;
+    } else {
+      rectElement.style.backgroundImage = 'none';
+    }
+  }
+
+  function applyCropFromState() {
+    const { wrapper, img, overlay, lastRect } = imageCropState;
+    if (!wrapper || !img || !overlay || !lastRect) {
+      return false;
+    }
+    if (lastRect.width < IMAGE_CROP_MIN_SIZE || lastRect.height < IMAGE_CROP_MIN_SIZE) {
+      return false;
+    }
+    if (!img.complete || !img.naturalWidth || !img.naturalHeight) {
+      showToast('Image non encore chargée pour le rognage.', 'warning');
+      return false;
+    }
+    const overlayRect = overlay.getBoundingClientRect();
+    if (!overlayRect || overlayRect.width <= 0 || overlayRect.height <= 0) {
+      return false;
+    }
+    const scaleX = img.naturalWidth / overlayRect.width;
+    const scaleY = img.naturalHeight / overlayRect.height;
+    const cropX = Math.max(0, Math.round(lastRect.left * scaleX));
+    const cropY = Math.max(0, Math.round(lastRect.top * scaleY));
+    const cropWidth = Math.max(1, Math.round(lastRect.width * scaleX));
+    const cropHeight = Math.max(1, Math.round(lastRect.height * scaleY));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return false;
+    }
+
+    context.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    const dataUrl = canvas.toDataURL('image/png');
+    if (!dataUrl) {
+      return false;
+    }
+
+    img.src = dataUrl;
+    applyImageDimensions(wrapper, img, lastRect.width, lastRect.height);
+    updateImageHandleAccessibility(wrapper, img);
+    enhanceEditorImages();
+    handleEditorInput({ bypassReadOnly: true });
+
+    const savedSelection = cloneSelectionInfo(imageCropState.savedSelection);
+    if (savedSelection) {
+      state.savedSelection = savedSelection;
+    }
+    selectEditorImage(wrapper);
+    return true;
+  }
+
+  function handleImageCropPointerDown(event) {
+    if (!(event instanceof PointerEvent)) return;
+    if (!imageCropState.isActive) return;
+    const overlay = imageCropState.overlay;
+    if (!overlay || event.currentTarget !== overlay) return;
+    if (typeof event.button === 'number' && event.button !== 0) return;
+
+    const overlayRect = overlay.getBoundingClientRect();
+    const localX = Math.max(0, Math.min(overlayRect.width, event.clientX - overlayRect.left));
+    const localY = Math.max(0, Math.min(overlayRect.height, event.clientY - overlayRect.top));
+
+    imageCropState.pointerId = event.pointerId;
+    imageCropState.startX = localX;
+    imageCropState.startY = localY;
+    imageCropState.lastRect = { left: localX, top: localY, width: 0, height: 0 };
+
+    overlay.classList.add('is-dragging');
+    event.preventDefault();
+    if (typeof overlay.setPointerCapture === 'function') {
+      try {
+        overlay.setPointerCapture(event.pointerId);
+      } catch (error) {}
+    }
+  }
+
+  function handleImageCropPointerMove(event) {
+    if (!(event instanceof PointerEvent)) return;
+    if (!imageCropState.isActive) return;
+    if (imageCropState.pointerId === null || event.pointerId !== imageCropState.pointerId) {
+      return;
+    }
+    const overlay = imageCropState.overlay;
+    const rectElement = imageCropState.rect;
+    const img = imageCropState.img;
+    if (!overlay || !rectElement || !img) return;
+
+    const overlayRect = overlay.getBoundingClientRect();
+    const currentX = Math.max(0, Math.min(overlayRect.width, event.clientX - overlayRect.left));
+    const currentY = Math.max(0, Math.min(overlayRect.height, event.clientY - overlayRect.top));
+
+    const left = Math.min(imageCropState.startX, currentX);
+    const top = Math.min(imageCropState.startY, currentY);
+    const width = Math.abs(currentX - imageCropState.startX);
+    const height = Math.abs(currentY - imageCropState.startY);
+
+    const previewRect = { left, top, width, height };
+    imageCropState.lastRect = previewRect;
+    updateCropPreview(rectElement, overlay, img, previewRect);
+  }
+
+  function handleImageCropPointerUp(event) {
+    if (!(event instanceof PointerEvent)) return;
+    if (!imageCropState.isActive) return;
+    if (imageCropState.pointerId === null || event.pointerId !== imageCropState.pointerId) {
+      return;
+    }
+
+    const overlay = imageCropState.overlay;
+    if (overlay) {
+      overlay.classList.remove('is-dragging');
+      if (typeof overlay.releasePointerCapture === 'function') {
+        try {
+          overlay.releasePointerCapture(event.pointerId);
+        } catch (error) {}
+      }
+    }
+    event.preventDefault();
+
+    const applied = applyCropFromState();
+    exitImageCropMode({ cancel: !applied });
+  }
+
+  function handleImageCropPointerCancel(event) {
+    if (!(event instanceof PointerEvent)) return;
+    if (imageCropState.pointerId === null || event.pointerId !== imageCropState.pointerId) {
+      return;
+    }
+    const overlay = imageCropState.overlay;
+    if (overlay) {
+      overlay.classList.remove('is-dragging');
+      if (typeof overlay.releasePointerCapture === 'function') {
+        try {
+          overlay.releasePointerCapture(event.pointerId);
+        } catch (error) {}
+      }
+    }
+    exitImageCropMode({ cancel: true });
+  }
+
+  function handleImageCropKeyDown(event) {
+    if (!imageCropState.isActive) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      exitImageCropMode({ cancel: true });
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const applied = applyCropFromState();
+      exitImageCropMode({ cancel: !applied });
+    }
+  }
+
   function enhanceEditorImages() {
     if (!ui.noteEditor) return;
 
-    const wrappers = Array.from(ui.noteEditor.querySelectorAll(".editor-image"));
+    const wrappers = Array.from(ui.noteEditor.querySelectorAll('.editor-image'));
     wrappers.forEach((wrapper) => {
-      const img = wrapper.querySelector("img");
+      const img = wrapper.querySelector('img');
       if (!img) {
+        if (imageCropState.wrapper === wrapper) {
+          exitImageCropMode({ cancel: true });
+        }
         unwrapEditorImage(wrapper);
       }
     });
 
-    const images = Array.from(ui.noteEditor.querySelectorAll("img"));
+    const images = Array.from(ui.noteEditor.querySelectorAll('img'));
     const editorWidth = getEditorContentWidth();
 
     images.forEach((img) => {
@@ -1763,17 +2251,19 @@ function bootstrapApp() {
         return;
       }
       let wrapper = img.parentElement;
-      if (!wrapper || !wrapper.classList || !wrapper.classList.contains("editor-image")) {
-        wrapper = document.createElement("span");
-        wrapper.className = "editor-image";
+      if (!wrapper || !wrapper.classList || !wrapper.classList.contains('editor-image')) {
+        wrapper = document.createElement('span');
+        wrapper.className = 'editor-image';
         if (img.parentNode) {
           img.parentNode.insertBefore(wrapper, img);
         }
         wrapper.appendChild(img);
       }
 
-      const currentWidthStyle = (img.style.width || "").trim();
-      const isPercentWidth = currentWidthStyle.endsWith("%");
+      const currentWidthStyle = (img.style.width || '').trim();
+      const currentHeightStyle = (img.style.height || '').trim();
+      const isPercentWidth = currentWidthStyle.endsWith('%');
+
       if (!currentWidthStyle || isPercentWidth) {
         let baseWidth = Math.round(img.getBoundingClientRect().width);
         if (!baseWidth && img.naturalWidth) {
@@ -1785,133 +2275,261 @@ function bootstrapApp() {
         if (!baseWidth || !Number.isFinite(baseWidth)) {
           baseWidth = IMAGE_RESIZE_MIN_WIDTH;
         }
-        applyImageWidth(wrapper, img, baseWidth);
+        const numericHeight = Number.isFinite(parseFloat(currentHeightStyle))
+          ? parseFloat(currentHeightStyle)
+          : undefined;
+        applyImageDimensions(wrapper, img, baseWidth, numericHeight);
       } else {
-        const numeric = parseFloat(currentWidthStyle);
-        if (Number.isFinite(numeric)) {
-          applyImageWidth(wrapper, img, numeric);
+        const numericWidth = parseFloat(currentWidthStyle);
+        const numericHeight = Number.isFinite(parseFloat(currentHeightStyle))
+          ? parseFloat(currentHeightStyle)
+          : undefined;
+        if (Number.isFinite(numericWidth)) {
+          applyImageDimensions(wrapper, img, numericWidth, numericHeight);
         } else {
           wrapper.dataset.width = currentWidthStyle;
         }
       }
 
-      ensureImageHandle(wrapper, img);
+      ensureImageSelectionElements(wrapper, img);
 
       if (!img.dataset.editorImageEnhanceListener) {
-        img.addEventListener("load", () => {
+        img.addEventListener('load', () => {
           requestAnimationFrame(() => enhanceEditorImages());
         });
-        img.dataset.editorImageEnhanceListener = "true";
+        img.dataset.editorImageEnhanceListener = 'true';
       }
     });
-  }
 
-  function resetImageResizeState() {
-    imageResizeState.pointerId = null;
-    imageResizeState.wrapper = null;
-    imageResizeState.img = null;
-    imageResizeState.handle = null;
-    imageResizeState.startX = 0;
-    imageResizeState.startWidth = 0;
-    imageResizeState.editorWidth = 0;
-    imageResizeState.hasChanges = false;
-    imageResizeState.savedSelection = null;
-    isImageResizeActive = false;
+    if (activeImageWrapper && !ui.noteEditor.contains(activeImageWrapper)) {
+      activeImageWrapper = null;
+    }
   }
 
   function handleImageHandlePointerDown(event) {
-    if (!event || typeof event.pointerId !== "number") return;
-    const handle = event.target instanceof Element
-      ? event.target.closest(".editor-image__handle")
-      : null;
-    if (!handle) return;
-    if (typeof event.button === "number" && event.button !== 0) return;
-    if (typeof event.isPrimary === "boolean" && !event.isPrimary) return;
+    if (!(event instanceof PointerEvent)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const handle = target ? target.closest('.editor-image__handle') : null;
+    if (handle) {
+      if (typeof event.button === 'number' && event.button !== 0) return;
+      if (typeof event.isPrimary === 'boolean' && !event.isPrimary) return;
 
-    const wrapper = handle.closest(".editor-image");
-    const img = wrapper ? wrapper.querySelector("img") : null;
-    if (!wrapper || !img) return;
+      const wrapper = handle.closest('.editor-image');
+      const img = wrapper ? wrapper.querySelector('img') : null;
+      if (!wrapper || !img) return;
 
-    rememberEditorSelection();
-    imageResizeState.savedSelection = state.savedSelection
-      ? { ...state.savedSelection }
-      : null;
-    isImageResizeActive = true;
+      selectEditorImage(wrapper);
+      if (imageCropState.isActive && imageCropState.wrapper !== wrapper) {
+        exitImageCropMode({ cancel: true });
+      }
 
-    event.preventDefault();
-    event.stopPropagation();
+      rememberEditorSelection();
+      imageResizeState.savedSelection = cloneSelectionInfo(state.savedSelection);
+      isImageResizeActive = true;
 
-    const rect = img.getBoundingClientRect();
-    const rectWidth = rect && typeof rect.width === "number" ? rect.width : 0;
-    const styleWidth = parseFloat(img.style.width);
-    const fallbackWidth = Number.isFinite(styleWidth) && styleWidth > 0 ? styleWidth : IMAGE_RESIZE_MIN_WIDTH;
-    imageResizeState.pointerId = event.pointerId;
-    imageResizeState.wrapper = wrapper;
-    imageResizeState.img = img;
-    imageResizeState.handle = handle;
-    imageResizeState.startX = event.clientX;
-    imageResizeState.startWidth = rectWidth > 0 ? rectWidth : fallbackWidth;
-    imageResizeState.editorWidth = getEditorContentWidth();
-    imageResizeState.hasChanges = false;
+      event.preventDefault();
+      event.stopPropagation();
 
-    wrapper.classList.add("editor-image--resizing");
-    if (typeof handle.setPointerCapture === "function") {
-      try {
-        handle.setPointerCapture(event.pointerId);
-      } catch (error) {}
+      const rect = img.getBoundingClientRect();
+      const styleWidth = parseFloat(img.style.width);
+      const styleHeight = parseFloat(img.style.height);
+      const fallbackWidth = Number.isFinite(styleWidth) && styleWidth > 0 ? styleWidth : IMAGE_RESIZE_MIN_WIDTH;
+      const fallbackHeight = Number.isFinite(styleHeight) && styleHeight > 0 ? styleHeight : IMAGE_RESIZE_MIN_HEIGHT;
+
+      imageResizeState.pointerId = event.pointerId;
+      imageResizeState.wrapper = wrapper;
+      imageResizeState.img = img;
+      imageResizeState.handle = handle;
+      imageResizeState.handleDirection = handle.dataset.handle || null;
+      imageResizeState.startX = event.clientX;
+      imageResizeState.startY = event.clientY;
+      imageResizeState.startWidth = rect.width > 0 ? rect.width : fallbackWidth;
+      imageResizeState.startHeight = rect.height > 0 ? rect.height : fallbackHeight;
+      imageResizeState.editorWidth = getEditorContentWidth();
+      imageResizeState.hasChanges = false;
+
+      wrapper.classList.add('editor-image--resizing');
+      if (typeof handle.setPointerCapture === 'function') {
+        try {
+          handle.setPointerCapture(event.pointerId);
+        } catch (error) {}
+      }
+      if (typeof handle.focus === 'function') {
+        handle.focus({ preventScroll: true });
+      }
+      return;
     }
-    if (typeof handle.focus === "function") {
-      handle.focus({ preventScroll: true });
+
+    const wrapper = target ? target.closest('.editor-image') : null;
+    const img = wrapper ? wrapper.querySelector('img') : null;
+    if (wrapper && img) {
+      selectEditorImage(wrapper);
+      return;
+    }
+
+    if (!closestElement(target, '.editor-image__crop-overlay')) {
+      deselectEditorImage();
     }
   }
 
   function handleImageHandlePointerMove(event) {
-    if (!event || typeof event.pointerId !== "number") return;
+    if (!(event instanceof PointerEvent)) return;
     if (imageResizeState.pointerId === null || event.pointerId !== imageResizeState.pointerId) {
       return;
     }
-    const { img, wrapper, handle, startX, startWidth } = imageResizeState;
-    if (!img || !wrapper || !handle) {
+    const { img, wrapper, handleDirection, startX, startY, startWidth, startHeight } = imageResizeState;
+    if (!img || !wrapper || !handleDirection) {
       return;
     }
 
     event.preventDefault();
 
+    const rect = img.getBoundingClientRect();
+    const naturalWidth = Number.isFinite(img.naturalWidth) ? img.naturalWidth : 0;
+    const naturalHeight = Number.isFinite(img.naturalHeight) ? img.naturalHeight : 0;
+    let aspectRatio =
+      naturalWidth > 0 && naturalHeight > 0
+        ? naturalWidth / naturalHeight
+        : rect.width > 0 && rect.height > 0
+          ? rect.width / rect.height
+          : startWidth > 0 && startHeight > 0
+            ? startWidth / startHeight
+            : 1;
+    if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) {
+      aspectRatio = 1;
+    }
+
     const deltaX = event.clientX - startX;
-    const editorWidth = getEditorContentWidth();
-    const tentativeWidth = startWidth + deltaX;
+    const deltaY = event.clientY - startY;
+    const controlsHorizontal = handleDirection.includes('e') || handleDirection.includes('w');
+    const controlsVertical = handleDirection.includes('n') || handleDirection.includes('s');
+    if (!controlsHorizontal && !controlsVertical) {
+      return;
+    }
+
+    let tentativeWidth = startWidth;
+    let tentativeHeight = startHeight;
+
+    if (controlsHorizontal) {
+      if (handleDirection.includes('e')) {
+        tentativeWidth = startWidth + deltaX;
+      } else if (handleDirection.includes('w')) {
+        tentativeWidth = startWidth - deltaX;
+      }
+    }
+    if (controlsVertical) {
+      if (handleDirection.includes('s')) {
+        tentativeHeight = startHeight + deltaY;
+      } else if (handleDirection.includes('n')) {
+        tentativeHeight = startHeight - deltaY;
+      }
+    }
+
     const minWidth = IMAGE_RESIZE_MIN_WIDTH;
+    const minHeight = IMAGE_RESIZE_MIN_HEIGHT;
+    const editorWidth = getEditorContentWidth();
     const maxWidth = editorWidth > 0 ? Math.max(editorWidth, minWidth) : Math.max(startWidth, minWidth);
-    const clamped = Math.max(minWidth, Math.min(tentativeWidth, maxWidth));
-    const previous = parseFloat(img.style.width);
+    const baseHeight = img.naturalHeight || startHeight || minHeight;
+    const maxHeight = Math.max(baseHeight, startHeight, minHeight) * 3;
 
-    applyImageWidth(wrapper, img, clamped);
-    updateImageHandleAccessibility(wrapper, img, handle);
+    const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
 
-    if (!Number.isFinite(previous) || Math.round(previous) !== Math.round(clamped)) {
+    const resolveFromWidth = (widthValue) => {
+      let widthMinBound = minWidth;
+      let widthMaxBound = maxWidth;
+
+      const widthFromMinHeight = minHeight * aspectRatio;
+      if (Number.isFinite(widthFromMinHeight) && widthFromMinHeight > 0) {
+        widthMinBound = Math.max(widthMinBound, widthFromMinHeight);
+      }
+
+      const widthFromMaxHeight = maxHeight * aspectRatio;
+      if (Number.isFinite(widthFromMaxHeight) && widthFromMaxHeight > 0) {
+        widthMaxBound = Math.min(widthMaxBound, widthFromMaxHeight);
+      }
+
+      let resolvedWidth = Number.isFinite(widthValue) ? widthValue : startWidth;
+      if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+        resolvedWidth = startWidth > 0 ? startWidth : widthMinBound;
+      }
+      if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+        resolvedWidth = widthMinBound > 0 ? widthMinBound : minWidth;
+      }
+
+      if (widthMinBound > widthMaxBound) {
+        const candidateMin = clamp(widthMinBound, minWidth, maxWidth);
+        const candidateMax = clamp(widthMaxBound, minWidth, maxWidth);
+        const distanceToMin = Math.abs(resolvedWidth - candidateMin);
+        const distanceToMax = Math.abs(resolvedWidth - candidateMax);
+        resolvedWidth = distanceToMin <= distanceToMax ? candidateMin : candidateMax;
+      } else {
+        resolvedWidth = clamp(resolvedWidth, widthMinBound, widthMaxBound);
+      }
+
+      let resolvedHeight = resolvedWidth / aspectRatio;
+      if (!Number.isFinite(resolvedHeight) || resolvedHeight <= 0) {
+        resolvedHeight = startHeight > 0 ? startHeight : minHeight;
+      }
+
+      if (resolvedHeight < minHeight) {
+        resolvedHeight = minHeight;
+        resolvedWidth = clamp(resolvedHeight * aspectRatio, minWidth, maxWidth);
+        resolvedHeight = resolvedWidth / aspectRatio;
+      } else if (resolvedHeight > maxHeight) {
+        resolvedHeight = maxHeight;
+        resolvedWidth = clamp(resolvedHeight * aspectRatio, minWidth, maxWidth);
+        resolvedHeight = resolvedWidth / aspectRatio;
+      }
+
+      if (!Number.isFinite(resolvedWidth) || resolvedWidth <= 0) {
+        resolvedWidth = minWidth;
+        resolvedHeight = resolvedWidth / aspectRatio;
+      }
+      if (!Number.isFinite(resolvedHeight) || resolvedHeight <= 0) {
+        resolvedHeight = minHeight;
+        resolvedWidth = resolvedHeight * aspectRatio;
+      }
+
+      return { width: resolvedWidth, height: resolvedHeight };
+    };
+
+    const useWidthReference = controlsHorizontal && (!controlsVertical || Math.abs(tentativeWidth - startWidth) >= Math.abs(tentativeHeight - startHeight));
+    const widthInput = useWidthReference ? tentativeWidth : tentativeHeight * aspectRatio;
+    const { width: targetWidth, height: targetHeight } = resolveFromWidth(widthInput);
+
+    const previousWidth = parseFloat(img.style.width);
+    const previousHeight = parseFloat(img.style.height);
+
+    const appliedDimensions = applyImageDimensions(wrapper, img, targetWidth, targetHeight);
+    updateImageHandleAccessibility(wrapper, img);
+
+    const widthChanged = !Number.isFinite(previousWidth) || Math.round(previousWidth) !== appliedDimensions.width;
+    const heightChanged = !Number.isFinite(previousHeight) || Math.round(previousHeight) !== appliedDimensions.height;
+    if (widthChanged || heightChanged) {
       imageResizeState.hasChanges = true;
     }
   }
 
   function handleImageHandlePointerUp(event) {
-    if (!event || typeof event.pointerId !== "number") return;
+    if (!(event instanceof PointerEvent)) return;
     if (imageResizeState.pointerId === null || event.pointerId !== imageResizeState.pointerId) {
       return;
     }
-    const { handle, wrapper, hasChanges } = imageResizeState;
-    const savedSelection = imageResizeState.savedSelection
-      ? { ...imageResizeState.savedSelection }
-      : null;
+    const { handle, wrapper, img, hasChanges } = imageResizeState;
+    const savedSelection = cloneSelectionInfo(imageResizeState.savedSelection);
 
     event.preventDefault();
 
-    if (handle && typeof handle.releasePointerCapture === "function") {
+    if (handle && typeof handle.releasePointerCapture === 'function') {
       try {
         handle.releasePointerCapture(event.pointerId);
       } catch (error) {}
     }
     if (wrapper) {
-      wrapper.classList.remove("editor-image--resizing");
+      wrapper.classList.remove('editor-image--resizing');
+    }
+    if (wrapper && img) {
+      updateImageHandleAccessibility(wrapper, img);
     }
 
     resetImageResizeState();
@@ -1927,21 +2545,22 @@ function bootstrapApp() {
   }
 
   function handleImageHandlePointerCancel(event) {
-    if (!event || typeof event.pointerId !== "number") return;
+    if (!(event instanceof PointerEvent)) return;
     if (imageResizeState.pointerId === null || event.pointerId !== imageResizeState.pointerId) {
       return;
     }
-    const { handle, wrapper } = imageResizeState;
-    const savedSelection = imageResizeState.savedSelection
-      ? { ...imageResizeState.savedSelection }
-      : null;
-    if (handle && typeof handle.releasePointerCapture === "function") {
+    const { handle, wrapper, img } = imageResizeState;
+    const savedSelection = cloneSelectionInfo(imageResizeState.savedSelection);
+    if (handle && typeof handle.releasePointerCapture === 'function') {
       try {
         handle.releasePointerCapture(event.pointerId);
       } catch (error) {}
     }
     if (wrapper) {
-      wrapper.classList.remove("editor-image--resizing");
+      wrapper.classList.remove('editor-image--resizing');
+    }
+    if (wrapper && img) {
+      updateImageHandleAccessibility(wrapper, img);
     }
     resetImageResizeState();
     if (savedSelection) {
@@ -1951,22 +2570,51 @@ function bootstrapApp() {
 
   function handleImageHandleKeyDown(event) {
     if (!(event instanceof KeyboardEvent)) return;
-    const target = event.target instanceof Element ? event.target.closest(".editor-image__handle") : null;
+    const target = event.target instanceof Element ? event.target.closest('.editor-image__handle') : null;
     if (!target) return;
 
-    const wrapper = target.closest(".editor-image");
-    const img = wrapper ? wrapper.querySelector("img") : null;
+    const wrapper = target.closest('.editor-image');
+    const img = wrapper ? wrapper.querySelector('img') : null;
     if (!wrapper || !img) return;
 
-    const savedSelection = state.savedSelection
-      ? { ...state.savedSelection }
-      : null;
+    const direction = target.dataset.handle || '';
+    const savedSelection = cloneSelectionInfo(state.savedSelection);
+
+    if (event.key === 'c' || event.key === 'C' || event.key === 'Enter') {
+      event.preventDefault();
+      selectEditorImage(wrapper);
+      enterImageCropMode(wrapper, img);
+      return;
+    }
 
     let step = event.shiftKey ? IMAGE_RESIZE_KEYBOARD_STEP_LARGE : IMAGE_RESIZE_KEYBOARD_STEP;
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
-      step *= -1;
-    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
-      step *= 1;
+    let widthDelta = 0;
+    let heightDelta = 0;
+
+    if (event.key === 'ArrowLeft') {
+      if (direction.includes('e')) {
+        widthDelta = -step;
+      } else if (direction.includes('w')) {
+        widthDelta = step;
+      }
+    } else if (event.key === 'ArrowRight') {
+      if (direction.includes('e')) {
+        widthDelta = step;
+      } else if (direction.includes('w')) {
+        widthDelta = -step;
+      }
+    } else if (event.key === 'ArrowUp') {
+      if (direction.includes('s')) {
+        heightDelta = -step;
+      } else if (direction.includes('n')) {
+        heightDelta = step;
+      }
+    } else if (event.key === 'ArrowDown') {
+      if (direction.includes('s')) {
+        heightDelta = step;
+      } else if (direction.includes('n')) {
+        heightDelta = -step;
+      }
     } else {
       return;
     }
@@ -1975,17 +2623,27 @@ function bootstrapApp() {
     event.stopPropagation();
 
     const rect = img.getBoundingClientRect();
-    const rectWidth = rect && typeof rect.width === "number" ? rect.width : parseFloat(img.style.width);
-    const currentWidth = Number.isFinite(rectWidth) ? rectWidth : IMAGE_RESIZE_MIN_WIDTH;
-    const editorWidth = getEditorContentWidth();
-    const tentativeWidth = currentWidth + step;
+    const currentWidth = rect.width || parseFloat(img.style.width) || IMAGE_RESIZE_MIN_WIDTH;
+    const currentHeight = rect.height || parseFloat(img.style.height) || IMAGE_RESIZE_MIN_HEIGHT;
+
+    const tentativeWidth = currentWidth + widthDelta;
+    const tentativeHeight = currentHeight + heightDelta;
+
     const minWidth = IMAGE_RESIZE_MIN_WIDTH;
+    const minHeight = IMAGE_RESIZE_MIN_HEIGHT;
+    const editorWidth = getEditorContentWidth();
     const maxWidth = editorWidth > 0 ? Math.max(editorWidth, minWidth) : Math.max(currentWidth, minWidth);
-    const clamped = Math.max(minWidth, Math.min(tentativeWidth, maxWidth));
+    const baseHeight = img.naturalHeight || currentHeight || minHeight;
+    const maxHeight = Math.max(baseHeight, currentHeight, minHeight) * 3;
 
-    applyImageWidth(wrapper, img, clamped);
-    updateImageHandleAccessibility(wrapper, img, target);
+    const clampedWidth = Math.max(minWidth, Math.min(tentativeWidth, maxWidth));
+    const clampedHeight = Math.max(minHeight, Math.min(tentativeHeight, maxHeight));
 
+    const widthArg = direction.includes('e') || direction.includes('w') ? clampedWidth : undefined;
+    const heightArg = direction.includes('n') || direction.includes('s') ? clampedHeight : undefined;
+
+    applyImageDimensions(wrapper, img, widthArg, heightArg);
+    updateImageHandleAccessibility(wrapper, img);
     enhanceEditorImages();
     handleEditorInput({ bypassReadOnly: true });
     if (savedSelection) {
@@ -1993,9 +2651,35 @@ function bootstrapApp() {
     }
   }
 
+  function handleDocumentPointerDownForImages(event) {
+    if (!activeImageWrapper) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    if (activeImageWrapper.contains(target)) {
+      return;
+    }
+    if (closestElement(target, '.editor-image')) {
+      return;
+    }
+    if (closestElement(target, '.editor-image__crop-overlay')) {
+      return;
+    }
+    deselectEditorImage();
+  }
+
+  function handleEditorImageDoubleClick(event) {
+    const wrapper = closestElement(event.target, '.editor-image');
+    if (!wrapper) return;
+    const img = wrapper.querySelector('img');
+    if (!img) return;
+    event.preventDefault();
+    selectEditorImage(wrapper);
+    enterImageCropMode(wrapper, img);
+  }
   function showEmptyEditor() {
     setRevisionMode(false);
     hideClozeFeedback();
+    deselectEditorImage();
     ui.editorWrapper.classList.add("hidden");
     ui.emptyState.classList.remove("hidden");
     ui.noteTitle.value = "";
@@ -2023,6 +2707,7 @@ function bootstrapApp() {
       return;
     }
     hideClozeFeedback();
+    deselectEditorImage();
     ui.emptyState.classList.add("hidden");
     ui.editorWrapper.classList.remove("hidden");
     const desiredTitle = state.currentNote.title || "";
@@ -2194,6 +2879,7 @@ function bootstrapApp() {
 
     const row = document.createElement("div");
     row.className = "note-row";
+    row.classList.add(hasChildren ? "note-row--has-toggle" : "note-row--no-toggle");
     row.style.setProperty("--note-depth", String(Math.max(level - 1, 0)));
 
     let toggleButton = null;
@@ -2479,6 +3165,7 @@ function bootstrapApp() {
   async function openNote(note, options = {}) {
     if (!note) return;
     const { skipFlush = false } = options;
+    setTextColorPopover(false);
     if (!skipFlush) {
       await flushPendingSave();
     }
@@ -2601,9 +3288,7 @@ function bootstrapApp() {
 
     if (isHashInsertion) {
       rememberEditorSelection();
-      const selectionBeforeShortcut = state.savedSelection
-        ? { ...state.savedSelection }
-        : null;
+      const selectionBeforeShortcut = cloneSelectionInfo(state.savedSelection);
       const transformedResult = runWithPreservedSelection(() => applyClozeShortcut());
       const transformed =
         transformedResult && typeof transformedResult === "object"
@@ -2616,9 +3301,7 @@ function bootstrapApp() {
 
     if (isPasteInsertion && editorHasRawCloze()) {
       rememberEditorSelection();
-      const selectionBeforeShortcut = state.savedSelection
-        ? { ...state.savedSelection }
-        : null;
+      const selectionBeforeShortcut = cloneSelectionInfo(state.savedSelection);
       let transformedAtLeastOnce = false;
       let attempts = 0;
       const MAX_TRANSFORMS = 200;
@@ -2650,6 +3333,87 @@ function bootstrapApp() {
     }
   }
 
+  function getNodePath(root, node) {
+    if (!root || !node) {
+      return null;
+    }
+    const path = [];
+    let current = node;
+    while (current && current !== root) {
+      const parent = current.parentNode;
+      if (!parent) {
+        return null;
+      }
+      const index = Array.prototype.indexOf.call(parent.childNodes, current);
+      if (index === -1) {
+        return null;
+      }
+      path.unshift(index);
+      current = parent;
+    }
+    if (current !== root) {
+      return null;
+    }
+    return path;
+  }
+
+  function getNodeFromPath(root, path) {
+    if (!root || !Array.isArray(path)) {
+      return null;
+    }
+    let current = root;
+    for (let i = 0; i < path.length; i += 1) {
+      const index = path[i];
+      if (
+        !current ||
+        !current.childNodes ||
+        typeof index !== "number" ||
+        index < 0 ||
+        index >= current.childNodes.length
+      ) {
+        return null;
+      }
+      current = current.childNodes[index];
+    }
+    return current;
+  }
+
+  function normalizeRangeOffset(node, offset) {
+    if (!node) {
+      return 0;
+    }
+    const maxOffset =
+      node.nodeType === Node.TEXT_NODE
+        ? node.length
+        : node.childNodes
+        ? node.childNodes.length
+        : 0;
+    if (typeof offset !== "number" || Number.isNaN(offset)) {
+      return maxOffset;
+    }
+    if (offset < 0) {
+      return 0;
+    }
+    if (offset > maxOffset) {
+      return maxOffset;
+    }
+    return offset;
+  }
+
+  function cloneSelectionInfo(selection) {
+    if (!selection || typeof selection !== "object") {
+      return null;
+    }
+    const cloned = { ...selection };
+    if (Array.isArray(selection.startPath)) {
+      cloned.startPath = [...selection.startPath];
+    }
+    if (Array.isArray(selection.endPath)) {
+      cloned.endPath = [...selection.endPath];
+    }
+    return cloned;
+  }
+
   function captureSelection(container) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return null;
@@ -2661,7 +3425,17 @@ function bootstrapApp() {
     preRange.selectNodeContents(container);
     preRange.setEnd(range.startContainer, range.startOffset);
     const start = preRange.toString().length;
-    return { start, end: start + range.toString().length };
+    const end = start + range.toString().length;
+    const startPath = getNodePath(container, range.startContainer);
+    const endPath = getNodePath(container, range.endContainer);
+    return {
+      start,
+      end,
+      startPath,
+      endPath,
+      startOffset: range.startOffset,
+      endOffset: range.endOffset,
+    };
   }
 
   function restoreSelection(container, saved) {
@@ -2669,48 +3443,76 @@ function bootstrapApp() {
     const selection = window.getSelection();
     if (!selection) return;
     const range = document.createRange();
-    let charIndex = 0;
     let startNode = null;
     let endNode = null;
-    let startOffset = 0;
-    let endOffset = 0;
+    let startOffset = saved.startOffset;
+    let endOffset = saved.endOffset;
 
-    const traverse = (node) => {
-      if (endNode) return;
-      if (node.nodeType === Node.TEXT_NODE) {
-        const nextCharIndex = charIndex + node.length;
-        if (!startNode && saved.start >= charIndex && saved.start <= nextCharIndex) {
-          startNode = node;
-          startOffset = saved.start - charIndex;
-        }
-        if (!endNode && saved.end >= charIndex && saved.end <= nextCharIndex) {
-          endNode = node;
-          endOffset = saved.end - charIndex;
-        }
-        charIndex = nextCharIndex;
+    const startPath = Array.isArray(saved.startPath) ? saved.startPath : null;
+    const endPath = Array.isArray(saved.endPath) ? saved.endPath : null;
+
+    if (startPath && endPath) {
+      startNode = getNodeFromPath(container, startPath);
+      endNode = getNodeFromPath(container, endPath);
+      if (startNode && endNode) {
+        startOffset = normalizeRangeOffset(startNode, startOffset);
+        endOffset = normalizeRangeOffset(endNode, endOffset);
       } else {
-        for (let i = 0; i < node.childNodes.length; i += 1) {
-          traverse(node.childNodes[i]);
-          if (endNode) {
-            break;
+        startNode = null;
+        endNode = null;
+      }
+    }
+
+    if (!startNode || !endNode) {
+      let charIndex = 0;
+      let fallbackStartNode = null;
+      let fallbackEndNode = null;
+      let fallbackStartOffset = 0;
+      let fallbackEndOffset = 0;
+
+      const traverse = (node) => {
+        if (fallbackEndNode) return;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const nextCharIndex = charIndex + node.length;
+          if (
+            !fallbackStartNode &&
+            typeof saved.start === "number" &&
+            saved.start >= charIndex &&
+            saved.start <= nextCharIndex
+          ) {
+            fallbackStartNode = node;
+            fallbackStartOffset = saved.start - charIndex;
+          }
+          if (
+            !fallbackEndNode &&
+            typeof saved.end === "number" &&
+            saved.end >= charIndex &&
+            saved.end <= nextCharIndex
+          ) {
+            fallbackEndNode = node;
+            fallbackEndOffset = saved.end - charIndex;
+          }
+          charIndex = nextCharIndex;
+        } else {
+          for (let i = 0; i < node.childNodes.length; i += 1) {
+            traverse(node.childNodes[i]);
+            if (fallbackEndNode) {
+              break;
+            }
           }
         }
-      }
-    };
+      };
 
-    traverse(container);
+      traverse(container);
 
-    if (!startNode) {
-      startNode = container;
-      startOffset = container.childNodes.length;
-    }
-    if (!endNode) {
-      endNode = startNode;
-      endOffset = startOffset;
+      startNode = fallbackStartNode || container;
+      endNode = fallbackEndNode || startNode;
+      startOffset = normalizeRangeOffset(startNode, fallbackStartOffset);
+      endOffset = normalizeRangeOffset(endNode, fallbackEndOffset);
     }
 
-    range.setStart(startNode, Math.max(0, startOffset));
-    range.setEnd(endNode, Math.max(0, endOffset));
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
 
     const isCollapsedSelection =
       typeof saved.start === "number" &&
@@ -3365,12 +4167,281 @@ function bootstrapApp() {
     updateFontSizeDisplay();
   }
 
-  function applyTextColor(color) {
-    const value = typeof color === "string" && color.trim() ? color : DEFAULT_TEXT_COLOR;
-    runWithPreservedSelection(() => {
-      document.execCommand("foreColor", false, value);
-      handleEditorInput();
+  function normalizeHexColor(color) {
+    if (typeof color !== "string") {
+      return "";
+    }
+    const trimmed = color.trim();
+    if (!trimmed) {
+      return "";
+    }
+    const sixDigit = /^#([0-9a-fA-F]{6})$/.exec(trimmed);
+    if (sixDigit) {
+      return `#${sixDigit[1].toLowerCase()}`;
+    }
+    const shortHex = /^#([0-9a-fA-F]{3})$/.exec(trimmed);
+    if (shortHex) {
+      const [r, g, b] = shortHex[1].toLowerCase().split("");
+      return `#${r}${r}${g}${g}${b}${b}`;
+    }
+    return trimmed;
+  }
+
+  function formatColorForInput(color) {
+    const normalized = normalizeHexColor(color);
+    if (/^#[0-9a-f]{6}$/.test(normalized)) {
+      return normalized;
+    }
+    return "";
+  }
+
+  function getTextColorLabel(color) {
+    const normalized = normalizeHexColor(color);
+    const preset = TEXT_COLOR_PRESETS.find(
+      (entry) => normalizeHexColor(entry.value) === normalized
+    );
+    if (preset && preset.label) {
+      return preset.label;
+    }
+    if (/^#[0-9a-f]{6}$/.test(normalized)) {
+      return normalized.toUpperCase();
+    }
+    const fallback = TEXT_COLOR_PRESETS.find(
+      (entry) => normalizeHexColor(entry.value) === normalizeHexColor(DEFAULT_TEXT_COLOR)
+    );
+    return fallback?.label || DEFAULT_TEXT_COLOR.toUpperCase();
+  }
+
+  function updateTextColorSelection(color) {
+    if (!ui.textColorOptions) return;
+    const normalized = normalizeHexColor(color);
+    const swatches = ui.textColorOptions.querySelectorAll(".color-swatch");
+    swatches.forEach((swatch) => {
+      const swatchColor = normalizeHexColor(swatch.dataset.color);
+      const isSelected = Boolean(swatchColor && swatchColor === normalized);
+      swatch.classList.toggle("is-selected", isSelected);
+      swatch.setAttribute("aria-pressed", isSelected ? "true" : "false");
     });
+  }
+
+  function updateTextColorState(color) {
+    const normalized = normalizeHexColor(color);
+    const resolved = /^#[0-9a-f]{6}$/.test(normalized) ? normalized : DEFAULT_TEXT_COLOR;
+    state.textColor = resolved;
+    if (ui.textColorButton) {
+      ui.textColorButton.dataset.value = resolved;
+      const colorBar = ui.textColorButton.querySelector(".color-bar");
+      if (colorBar) {
+        colorBar.style.background = resolved;
+      }
+      const label = getTextColorLabel(resolved);
+      const srLabel = ui.textColorButton.querySelector(".sr-only");
+      if (srLabel) {
+        srLabel.textContent = `Appliquer la couleur du texte (${label})`;
+      }
+      ui.textColorButton.setAttribute("title", `Couleur du texte (${label})`);
+    }
+    if (ui.textColorCustomInput) {
+      const formatted = formatColorForInput(resolved);
+      if (formatted) {
+        ui.textColorCustomInput.value = formatted;
+      }
+    }
+    updateTextColorSelection(resolved);
+  }
+
+  function renderTextColorOptions() {
+    if (!ui.textColorOptions) return;
+    ui.textColorOptions.innerHTML = "";
+    TEXT_COLOR_PRESETS.forEach(({ value, label }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "color-swatch";
+      const normalized = normalizeHexColor(value);
+      button.dataset.color = normalized;
+      button.style.setProperty("--swatch-color", normalized);
+      const accessibleLabel = label || normalized.toUpperCase();
+      button.setAttribute("aria-label", accessibleLabel);
+      button.setAttribute("title", accessibleLabel);
+      button.setAttribute("aria-pressed", "false");
+      ui.textColorOptions.appendChild(button);
+    });
+    updateTextColorSelection(state.textColor);
+  }
+
+  function isTextColorPopoverOpen() {
+    return Boolean(state.isTextColorPopoverOpen);
+  }
+
+  function setTextColorPopover(open) {
+    const shouldOpen = Boolean(open);
+    if (!ui.textColorPopover || !ui.textColorButton) {
+      state.isTextColorPopoverOpen = false;
+      if (ui.toolbar) {
+        ui.toolbar.classList.remove("color-popover-open");
+      }
+      return;
+    }
+    if (ui.toolbar) {
+      ui.toolbar.classList.toggle("color-popover-open", shouldOpen);
+    }
+    if (shouldOpen === state.isTextColorPopoverOpen) {
+      if (shouldOpen && ui.textColorCustomInput) {
+        const formatted = formatColorForInput(state.textColor);
+        if (formatted) {
+          ui.textColorCustomInput.value = formatted;
+        }
+      }
+      return;
+    }
+    state.isTextColorPopoverOpen = shouldOpen;
+    if (shouldOpen) {
+      ui.textColorPopover.classList.add("is-open");
+      ui.textColorPopover.removeAttribute("hidden");
+      ui.textColorPopover.setAttribute("aria-hidden", "false");
+      ui.textColorButton.setAttribute("aria-expanded", "true");
+      if (ui.textColorCustomInput) {
+        const formatted = formatColorForInput(state.textColor);
+        if (formatted) {
+          ui.textColorCustomInput.value = formatted;
+        }
+      }
+      requestAnimationFrame(() => {
+        const preferred =
+          ui.textColorOptions?.querySelector(".color-swatch.is-selected") ??
+          ui.textColorOptions?.querySelector(".color-swatch");
+        if (preferred) {
+          preferred.focus({ preventScroll: true });
+        }
+      });
+    } else {
+      ui.textColorPopover.classList.remove("is-open");
+      ui.textColorPopover.setAttribute("aria-hidden", "true");
+      ui.textColorPopover.setAttribute("hidden", "");
+      ui.textColorButton.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function toggleTextColorPopover(forceOpen) {
+    if (!ui.textColorPopover || !ui.textColorButton) {
+      state.isTextColorPopoverOpen = false;
+      return;
+    }
+    const shouldOpen =
+      typeof forceOpen === "boolean" ? forceOpen : !state.isTextColorPopoverOpen;
+    setTextColorPopover(shouldOpen);
+  }
+
+  function handleTextColorPopoverClick(event) {
+    if (!state.currentNote) {
+      return;
+    }
+    const swatch = closestElement(event.target, "button[data-color]");
+    if (!swatch) {
+      return;
+    }
+    event.preventDefault();
+    const value = swatch.dataset.color;
+    if (!value) {
+      return;
+    }
+    applyTextColor(value);
+    setTextColorPopover(false);
+  }
+
+  function handleTextColorCustomInput(event) {
+    if (!state.currentNote) {
+      return;
+    }
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    if (!input || !input.value) {
+      return;
+    }
+    applyTextColor(input.value);
+  }
+
+  function handleTextColorCustomInputCommit(event) {
+    handleTextColorCustomInput(event);
+    setTextColorPopover(false);
+  }
+
+  function applyTextColor(color) {
+    if (!state.currentNote) {
+      return;
+    }
+    const normalized = normalizeHexColor(color);
+    const value = /^#[0-9a-f]{6}$/.test(normalized) ? normalized : DEFAULT_TEXT_COLOR;
+    runWithPreservedSelection(() => {
+      let applied = false;
+      let styleWithCssEnabled = false;
+      let previousStyleWithCss = false;
+      let canUseStyleWithCss = false;
+      if (typeof document.queryCommandSupported === "function") {
+        try {
+          canUseStyleWithCss = document.queryCommandSupported("styleWithCSS");
+        } catch (error) {
+          canUseStyleWithCss = false;
+        }
+      }
+
+      if (canUseStyleWithCss) {
+        if (typeof document.queryCommandState === "function") {
+          try {
+            previousStyleWithCss = document.queryCommandState("styleWithCSS");
+          } catch (error) {
+            previousStyleWithCss = false;
+          }
+        }
+        try {
+          document.execCommand("styleWithCSS", false, "true");
+          styleWithCssEnabled = true;
+        } catch (error) {
+          styleWithCssEnabled = false;
+        }
+      }
+
+      try {
+        applied = document.execCommand("foreColor", false, value);
+      } catch (error) {
+        applied = false;
+      } finally {
+        if (styleWithCssEnabled) {
+          const restoreValue = previousStyleWithCss ? "true" : "false";
+          try {
+            document.execCommand("styleWithCSS", false, restoreValue);
+          } catch (error) {
+            // Ignore inability to restore the previous mode.
+          }
+        }
+      }
+
+      if (!applied) {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          if (!range.collapsed) {
+            const span = document.createElement("span");
+            span.style.color = value;
+            try {
+              const contents = range.extractContents();
+              span.appendChild(contents);
+              range.insertNode(span);
+              selection.removeAllRanges();
+              const newRange = document.createRange();
+              newRange.selectNodeContents(span);
+              selection.addRange(newRange);
+              applied = true;
+            } catch (error) {
+              // Ignore extraction errors (e.g. partial selections that cannot be wrapped).
+            }
+          }
+        }
+      }
+
+      handleEditorInput();
+      return applied;
+    });
+    updateTextColorState(value);
   }
 
   function clearActiveCloze() {
@@ -3487,13 +4558,24 @@ function bootstrapApp() {
   }
 
   function handleDocumentClick(event) {
+    const targetNode = event.target instanceof Node ? event.target : null;
+    const targetElement = event.target instanceof Element ? event.target : null;
+
+    if (isTextColorPopoverOpen() && ui.textColorPopover && ui.textColorButton) {
+      const insidePopover = targetNode && ui.textColorPopover.contains(targetNode);
+      const onButton = targetNode && ui.textColorButton.contains(targetNode);
+      if (!insidePopover && !onButton) {
+        setTextColorPopover(false);
+      }
+    }
+
     if (!ui.clozeFeedback || ui.clozeFeedback.classList.contains("hidden")) {
       return;
     }
-    if (ui.clozeFeedback.contains(event.target)) {
+    if (targetNode && ui.clozeFeedback.contains(targetNode)) {
       return;
     }
-    if (closestElement(event.target, ".cloze")) {
+    if (targetElement && closestElement(targetElement, ".cloze")) {
       return;
     }
     hideClozeFeedback();
@@ -3522,6 +4604,9 @@ function bootstrapApp() {
     if (!button || !state.currentNote) return;
     const command = button.dataset.command;
     const action = button.dataset.action;
+    if (command || (action && action !== "applyTextColor")) {
+      setTextColorPopover(false);
+    }
     if (state.isRevisionMode) {
       if (action === "startIteration") {
         event.preventDefault();
@@ -3543,12 +4628,13 @@ function bootstrapApp() {
         handleEditorInput();
       });
     } else if (action) {
-      if (action === "applyHighlight") {
+      if (action === "applyTextColor") {
+        event.preventDefault();
+        handledBySelectionHelper = true;
+        toggleTextColorPopover();
+      } else if (action === "applyHighlight") {
         handledBySelectionHelper = true;
         applyHighlight();
-      } else if (action === "applyTextColor") {
-        handledBySelectionHelper = true;
-        applyTextColor(button.dataset.value);
       } else if (action === "increaseFontSize") {
         handledBySelectionHelper = true;
         adjustFontSize(1);
@@ -3568,6 +4654,7 @@ function bootstrapApp() {
       focusEditorPreservingSelection();
     }
     if (
+      action !== "applyTextColor" &&
       mobileMediaQuery.matches &&
       ui.toolbarMorePanel &&
       ui.toolbarMorePanel.classList.contains("is-open") &&
@@ -4035,6 +5122,25 @@ function bootstrapApp() {
     });
   }
 
+  function initTextColorControls() {
+    if (!ui.textColorButton) {
+      return;
+    }
+    if (ui.textColorOptions) {
+      renderTextColorOptions();
+    }
+    updateTextColorState(state.textColor);
+    state.isTextColorPopoverOpen = false;
+    setTextColorPopover(false);
+    if (ui.textColorPopover) {
+      ui.textColorPopover.addEventListener("click", handleTextColorPopoverClick);
+    }
+    if (ui.textColorCustomInput) {
+      ui.textColorCustomInput.addEventListener("input", handleTextColorCustomInput);
+      ui.textColorCustomInput.addEventListener("change", handleTextColorCustomInputCommit);
+    }
+  }
+
   function initEvents() {
     if (ui.authTabs.length) {
       ui.authTabs.forEach((button) => {
@@ -4084,10 +5190,13 @@ function bootstrapApp() {
     ui.noteEditor.addEventListener("focus", handleEditorFocus);
     ui.noteEditor.addEventListener("pointerdown", handleImageHandlePointerDown);
     ui.noteEditor.addEventListener("keydown", handleImageHandleKeyDown);
+    ui.noteEditor.addEventListener("dblclick", handleEditorImageDoubleClick);
     ui.noteEditor.addEventListener("keyup", rememberEditorSelection);
     ui.noteEditor.addEventListener("mouseup", rememberEditorSelection);
     ui.noteEditor.addEventListener("touchend", rememberEditorSelection);
     ui.noteEditor.addEventListener("blur", handleEditorBlur);
+    ui.toolbar.addEventListener("mousedown", rememberEditorSelection);
+    ui.toolbar.addEventListener("touchstart", rememberEditorSelection, { passive: true });
     ui.toolbar.addEventListener("click", handleToolbarClick);
     ui.toolbar.addEventListener("change", handleToolbarChange);
     if (ui.toolbarMoreBtn) {
@@ -4139,6 +5248,8 @@ function bootstrapApp() {
       ui.shareSearchInput.addEventListener("input", handleShareSearchInput);
     }
     document.addEventListener("click", handleDocumentClick);
+    document.addEventListener("pointerdown", handleDocumentPointerDownForImages);
+    document.addEventListener("keydown", handleImageCropKeyDown);
     document.addEventListener("selectionchange", handleSelectionChange);
     window.addEventListener("pointermove", handleImageHandlePointerMove);
     window.addEventListener("pointerup", handleImageHandlePointerUp);
@@ -4152,6 +5263,7 @@ function bootstrapApp() {
     });
   }
 
+  initTextColorControls();
   showAuthView(state.activeAuthView);
   initEvents();
   updateShareButtonState();

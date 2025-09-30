@@ -42,17 +42,6 @@
             >
               Mode révision
             </button>
-            <button
-              type="button"
-              id="share-note-btn"
-              class="header-mode-toggle ghost"
-              aria-haspopup="dialog"
-              aria-expanded="false"
-              aria-label="Partager cette fiche"
-              disabled
-            >
-              Partager
-            </button>
             <div class="header-menu-wrapper">
               <button
                 type="button"
@@ -68,6 +57,18 @@
                 <p class="menu-meta" role="none">
                   Connecté en tant que <span id="current-user" class="menu-meta-strong"></span>
                 </p>
+                <button
+                  type="button"
+                  id="share-note-btn"
+                  class="menu-item"
+                  role="menuitem"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-label="Partager cette fiche"
+                  disabled
+                >
+                  Partager
+                </button>
                 <button id="logout-btn" class="menu-item" role="menuitem">Se déconnecter</button>
               </div>
             </div>
@@ -116,12 +117,35 @@
                 class="toolbar-button color-tool"
                 data-action="applyTextColor"
                 data-value="#1f2937"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-controls="text-color-popover"
                 title="Couleur du texte"
               >
                 <span class="icon" aria-hidden="true">A</span>
                 <span class="color-bar" aria-hidden="true"></span>
                 <span class="sr-only">Appliquer la couleur du texte</span>
               </button>
+              <div
+                id="text-color-popover"
+                class="color-popover"
+                role="group"
+                aria-label="Couleurs du texte"
+                aria-hidden="true"
+                hidden
+              >
+                <div class="color-popover__grid" id="text-color-options"></div>
+                <label class="color-popover__custom" for="text-color-custom-input">
+                  <span>Couleur personnalisée</span>
+                  <input
+                    type="color"
+                    id="text-color-custom-input"
+                    name="text-color-custom-input"
+                    value="#1f2937"
+                    aria-label="Choisir une couleur personnalisée"
+                  />
+                </label>
+              </div>
               <button type="button" class="toolbar-button color-tool" data-action="applyHighlight" title="Surligner">
                 <span class="icon" aria-hidden="true">🖍</span>
                 <span class="color-bar highlight" aria-hidden="true"></span>
@@ -321,10 +345,6 @@
         <div class="workspace">
           <aside class="note-list" aria-label="Mes fiches">
             <div class="note-list-header">
-              <div class="note-list-title">
-                <h2>Mes fiches</h2>
-                <p class="muted small">Tout est enregistré automatiquement.</p>
-              </div>
               <div class="note-list-actions">
                 <button id="add-note-btn" type="button" aria-label="Nouvelle fiche">
                   Nouvelle fiche
