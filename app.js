@@ -207,6 +207,8 @@ function bootstrapApp() {
   };
   const CLOZE_PRIORITY_CLASSES = Object.values(CLOZE_PRIORITY_CLASS_MAP);
   const CLOZE_DEFER_DATA_KEY = "deferMask";
+  const CLOZE_DELAY_DATA_KEY = "delay";
+  const CLOZE_REVISION_DELAY_TABLE = [0, 1, 2, 4, 7];
   const CLOZE_MANUAL_REVEAL_SET_KEY = "revealedClozes";
   const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
   const CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY = "priorityManualReveal";
@@ -4034,6 +4036,73 @@ function bootstrapApp() {
     return setClozeScore(cloze, next);
   }
 
+  function computeRevisionDelay(score) {
+    const clamped = clampClozeScore(score);
+    if (clamped <= 0) {
+      return 0;
+    }
+    const index = Math.min(
+      Math.max(clamped, 0),
+      CLOZE_REVISION_DELAY_TABLE.length - 1
+    );
+    return CLOZE_REVISION_DELAY_TABLE[index] ?? 0;
+  }
+
+  function getClozeRevisionDelay(cloze) {
+    if (!cloze || !cloze.dataset) {
+      return null;
+    }
+    const raw = cloze.dataset[CLOZE_DELAY_DATA_KEY];
+    if (typeof raw !== "string" || raw.trim() === "") {
+      return null;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  }
+
+  function setClozeRevisionDelay(cloze, delay) {
+    if (!cloze || !cloze.dataset) {
+      return { delay: 0, changed: false };
+    }
+    const normalized = Math.max(0, Math.round(Number(delay)) || 0);
+    const previous = getClozeRevisionDelay(cloze);
+    cloze.dataset[CLOZE_DELAY_DATA_KEY] = normalized.toString();
+    return { delay: normalized, changed: previous !== normalized };
+  }
+
+  function updateClozeRevisionDelayFromScore(cloze, score) {
+    const delay = computeRevisionDelay(score);
+    const { changed } = setClozeRevisionDelay(cloze, delay);
+    return { delay, changed };
+  }
+
+  function formatClozeScore(score) {
+    return score > 0 ? `+${score}` : `${score}`;
+  }
+
+  function formatRevisionDelayDescription(delay) {
+    if (delay <= 0) {
+      return "à la prochaine itération";
+    }
+    if (delay === 1) {
+      return "dans 1 itération";
+    }
+    return `dans ${delay} itérations`;
+  }
+
+  function buildRevisionSummary(score, delay) {
+    const formattedScore = formatClozeScore(score);
+    const delayDescription = formatRevisionDelayDescription(delay);
+    return {
+      formattedScore,
+      delayDescription,
+      message: `Score actuel : ${formattedScore} • Prochaine révision estimée ${delayDescription}`
+    };
+  }
+
   function getClozePriority(cloze) {
     if (!cloze || !cloze.dataset) {
       return CLOZE_DEFAULT_PRIORITY;
@@ -4094,12 +4163,12 @@ function bootstrapApp() {
   function updateClozeTooltip(cloze, scoreValue = null) {
     if (!cloze) return;
     const score = scoreValue === null ? getClozeScore(cloze) : clampClozeScore(scoreValue);
-    if (score <= 0) {
-      cloze.setAttribute("title", "À réviser maintenant (retour prévu à cette itération)");
-    } else {
-      const formatted = score > 0 ? `+${score}` : `${score}`;
-      cloze.setAttribute("title", `Score actuel : ${formatted}`);
+    let delay = getClozeRevisionDelay(cloze);
+    if (delay === null) {
+      delay = computeRevisionDelay(score);
     }
+    const { message } = buildRevisionSummary(score, delay);
+    cloze.setAttribute("title", message);
   }
 
   function updateClozeFeedbackStyle(cloze) {
@@ -4143,6 +4212,9 @@ function bootstrapApp() {
       cloze.dataset.score = "0";
     }
     const score = setClozeScore(cloze, getClozeScore(cloze));
+    if (getClozeRevisionDelay(cloze) === null) {
+      updateClozeRevisionDelayFromScore(cloze, score);
+    }
     if (shouldMaskCloze(cloze, score)) {
       cloze.setAttribute("contenteditable", "false");
     } else {
@@ -4543,6 +4615,7 @@ function bootstrapApp() {
     const placeholder = generateClozePlaceholder();
     wrapper.dataset.placeholder = placeholder;
     wrapper.dataset.score = "0";
+    setClozeRevisionDelay(wrapper, 0);
     wrapper.dataset.priority = normalizeClozePriorityValue(priority);
     wrapper.classList.add("cloze-masked");
 
@@ -4593,22 +4666,49 @@ function bootstrapApp() {
         reactivatedCount += 1;
       }
 
-      const current = getClozeScore(cloze);
-      let next = current;
-
-      if (current > 0) {
-        skippedCount += 1;
-        next = clampClozeScore(current - 1);
-        if (next === 0) {
-          cloze.dataset[CLOZE_DEFER_DATA_KEY] = "1";
+      const currentScore = getClozeScore(cloze);
+      let delay = getClozeRevisionDelay(cloze);
+      if (delay === null) {
+        const { delay: computedDelay, changed: delayChanged } =
+          updateClozeRevisionDelayFromScore(cloze, currentScore);
+        delay = computedDelay;
+        if (delayChanged) {
+          changed = true;
         }
       }
 
-      if (next !== current) {
-        changed = true;
+      let nextDelay = delay;
+      let isDueNow = false;
+
+      if (delay > 0) {
+        nextDelay = Math.max(delay - 1, 0);
+        const { changed: delayChanged } = setClozeRevisionDelay(cloze, nextDelay);
+        if (delayChanged) {
+          changed = true;
+        }
+        if (nextDelay === 0) {
+          isDueNow = true;
+        } else {
+          skippedCount += 1;
+        }
+      } else {
+        // Already due or no delay configured.
+        const { changed: delayChanged } = setClozeRevisionDelay(cloze, 0);
+        if (delayChanged) {
+          changed = true;
+        }
+        isDueNow = true;
       }
 
-      setClozeScore(cloze, next);
+      if (isDueNow) {
+        cloze.dataset[CLOZE_DEFER_DATA_KEY] = "1";
+        if (!hadDeferred) {
+          reactivatedCount += 1;
+          changed = true;
+        }
+      }
+
+      setClozeScore(cloze, currentScore);
       cloze.classList.remove("cloze-revealed");
     });
 
@@ -5145,26 +5245,35 @@ function bootstrapApp() {
       return;
     }
 
-    cloze.dataset[CLOZE_DEFER_DATA_KEY] = "0";
     if (feedbackKey && CLOZE_FEEDBACK_STATUS_CLASSES[feedbackKey]) {
       cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY] = feedbackKey;
     } else {
       delete cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY];
     }
     const appliedScore = applyClozeScoreDelta(cloze, feedback.scoreDelta ?? 0);
+    const { delay: revisionDelay } = updateClozeRevisionDelayFromScore(
+      cloze,
+      appliedScore
+    );
+    if (revisionDelay > 0) {
+      cloze.dataset[CLOZE_DEFER_DATA_KEY] = "0";
+    } else {
+      cloze.dataset[CLOZE_DEFER_DATA_KEY] = "1";
+    }
     refreshClozeElement(cloze);
     handleEditorInput({ bypassReadOnly: true });
 
     const label = feedback.label || button.textContent.trim();
     const toastType = feedback.toastType || "info";
-    const formattedScore = appliedScore > 0 ? `+${appliedScore}` : `${appliedScore}`;
-    const scoreMessage = `Score actuel : ${formattedScore}`;
-    const hintMessage = scoreMessage;
+    const { message: revisionMessage } = buildRevisionSummary(
+      appliedScore,
+      revisionDelay
+    );
 
-    updateClozeFeedbackHint(hintMessage, feedbackKey);
+    updateClozeFeedbackHint(revisionMessage, feedbackKey);
     highlightClozeFeedbackButton(button, feedbackKey);
 
-    showToast(`Auto-évaluation : ${label} • ${scoreMessage}`, toastType);
+    showToast(`Auto-évaluation : ${label} • ${revisionMessage}`, toastType);
 
     requestAnimationFrame(() => {
       hideClozeFeedback();
