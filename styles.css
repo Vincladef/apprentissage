@@ -1735,7 +1735,9 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .editor .cloze.cloze-priority-hidden {
-  display: none;
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .editor .cloze.cloze-priority-high,
