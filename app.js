@@ -133,27 +133,27 @@ function bootstrapApp() {
   const CLOZE_PLACEHOLDER_TEXT = "[ … ]";
   const CLOZE_FEEDBACK_RULES = {
     yes: {
-      delta: 1,
+      probability: 0.05,
       label: "✅ Oui (réponse facile)",
       toastType: "success"
     },
     "rather-yes": {
-      delta: 0.5,
+      probability: 0.15,
       label: "🙂 Plutôt oui (réponse trouvée mais hésitante)",
       toastType: "success"
     },
     neutral: {
-      reset: true,
+      probability: 0.4,
       label: "😐 Neutre",
       toastType: "info"
     },
     "rather-no": {
-      reset: true,
+      probability: 0.7,
       label: "🤔 Plutôt non (erreur partielle)",
       toastType: "warning"
     },
     no: {
-      reset: true,
+      probability: 1,
       label: "❌ Non (réponse incorrecte ou oubliée)",
       toastType: "error"
     }
@@ -3963,21 +3963,30 @@ function bootstrapApp() {
     return CLOZE_PLACEHOLDER_TEXT;
   }
 
+  function sampleIterationDelay(probability) {
+    const numeric = Number(probability);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return 0;
+    }
+    if (numeric >= 1) {
+      return 0;
+    }
+    const random = Math.random();
+    const delay = Math.floor(Math.log(1 - random) / Math.log(1 - numeric));
+    return Number.isFinite(delay) && delay >= 0 ? delay : 0;
+  }
+
   function normalizeClozePoints(value) {
     const number = typeof value === "number" ? value : parseFloat(value);
     if (!Number.isFinite(number) || number <= 0) {
       return 0;
     }
-    const rounded = Math.round(number * 2) / 2;
-    return Math.max(0, rounded);
+    return Math.max(0, Math.round(number));
   }
 
   function formatClozePoints(value) {
     const normalized = normalizeClozePoints(value);
-    if (normalized === 0) {
-      return "0";
-    }
-    return Number.isInteger(normalized) ? String(Math.trunc(normalized)) : normalized.toString();
+    return normalized.toString();
   }
 
   function getClozePoints(cloze) {
@@ -4055,12 +4064,12 @@ function bootstrapApp() {
   function updateClozeTooltip(cloze, pointsValue = null) {
     if (!cloze) return;
     const points = pointsValue === null ? getClozePoints(cloze) : pointsValue;
-    const formatted = formatClozePoints(points);
     if (points <= 0) {
-      cloze.setAttribute("title", "À réviser maintenant (compteur : 0)");
+      cloze.setAttribute("title", "À réviser maintenant (retour prévu à cette itération)");
     } else {
-      const suffix = points > 1 ? "s" : "";
-      cloze.setAttribute("title", `Compteur : ${formatted} point${suffix}`);
+      const approx = points + 1;
+      const suffix = approx > 1 ? "s" : "";
+      cloze.setAttribute("title", `Reviens dans ~${approx} itération${suffix}`);
     }
   }
 
@@ -4579,14 +4588,14 @@ function bootstrapApp() {
       }
       if (skippedCount > 0) {
         const pluralSkip = skippedCount > 1 ? "s" : "";
-        messages.push(`${skippedCount} trou${pluralSkip} mis en pause pour cette itération.`);
+        messages.push(`${skippedCount} trou${pluralSkip} restent en attente.`);
       }
       const combinedMessage = messages.length
         ? messages.join(" ")
-        : "Compteurs mis à jour.";
+        : "Délais mis à jour.";
       showToast(`Nouvelle itération : ${combinedMessage}`, "success");
     } else {
-      showToast("Nouvelle itération : aucun compteur à réduire.", "info");
+      showToast("Nouvelle itération : aucun délai à ajuster.", "info");
     }
   }
 
@@ -5038,28 +5047,23 @@ function bootstrapApp() {
       return;
     }
 
-    const currentPoints = getClozePoints(cloze);
-    const newPoints = feedback.reset ? 0 : currentPoints + (feedback.delta || 0);
-    if (feedback.reset && cloze.dataset[CLOZE_DEFER_DATA_KEY]) {
-      delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
-    }
+    const delay = sampleIterationDelay(feedback.probability);
+    cloze.dataset[CLOZE_DEFER_DATA_KEY] = "0";
     if (feedbackKey && CLOZE_FEEDBACK_STATUS_CLASSES[feedbackKey]) {
       cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY] = feedbackKey;
     } else {
       delete cloze.dataset[CLOZE_FEEDBACK_STATUS_DATASET_KEY];
     }
-    const appliedPoints = setClozePoints(cloze, newPoints);
+    const appliedPoints = setClozePoints(cloze, delay);
     refreshClozeElement(cloze);
     handleEditorInput({ bypassReadOnly: true });
     hideClozeFeedback();
 
     const label = feedback.label || button.textContent.trim();
-    const pointsLabel = formatClozePoints(appliedPoints);
-    const toastType = feedback.toastType || (feedback.reset ? "warning" : "success");
-    const suffix = appliedPoints > 1 ? "s" : "";
-    const counterMessage = appliedPoints > 0
-      ? `Compteur : ${pointsLabel} point${suffix}`
-      : "Compteur remis à 0";
+    const toastType = feedback.toastType || "info";
+    const nextReview = appliedPoints + 1;
+    const suffix = nextReview > 1 ? "s" : "";
+    const counterMessage = `Reviendra dans ${nextReview} itération${suffix}`;
     showToast(`Auto-évaluation : ${label} • ${counterMessage}`, toastType);
   }
 
