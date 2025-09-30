@@ -4242,12 +4242,18 @@ function bootstrapApp() {
       const priority = normalizeClozePriorityValue(getClozePriority(cloze));
       const isVisible = !shouldFilter || priorities.has(priority);
       const isPriorityHidden = !isVisible;
+      const hasPriorityManualReveal =
+        cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
       cloze.classList.toggle("cloze-priority-hidden", isPriorityHidden);
       if (shouldFilter) {
         if (isPriorityHidden) {
-          cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] = "1";
-          if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
-            delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+          if (hasPriorityManualReveal) {
+            delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+          } else {
+            cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] = "1";
+            if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+              delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+            }
           }
         } else {
           delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
@@ -4956,13 +4962,23 @@ function bootstrapApp() {
 
   function handleEditorClick(event) {
     const cloze = closestElement(event.target, ".cloze");
-    if (!cloze || cloze.classList.contains("cloze-priority-hidden")) {
+    if (!cloze) {
       hideClozeFeedback();
       return;
     }
 
-    const wasMasked = cloze.classList.contains("cloze-masked");
     const manualRevealSet = getManualRevealSet();
+    const wasPriorityHidden = cloze.classList.contains("cloze-priority-hidden");
+    const wasMasked = cloze.classList.contains("cloze-masked");
+    if (wasPriorityHidden) {
+      manualRevealSet.add(cloze);
+      cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+      if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] === "1") {
+        delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+      }
+      refreshClozeElement(cloze);
+    }
+
     const hasPriorityManualReveal =
       cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
     const hasDeferredReveal =
