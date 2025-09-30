@@ -358,6 +358,9 @@ function bootstrapApp() {
     emptyState: document.getElementById("empty-note"),
     toast: document.getElementById("toast"),
     toolbar: document.querySelector(".editor-toolbar"),
+    clozeDropdown: document.getElementById("cloze-priority-dropdown"),
+    clozeDropdownToggle: document.getElementById("cloze-priority-toggle"),
+    clozeDropdownMenu: document.getElementById("cloze-priority-menu"),
     textColorButton: document.querySelector('button[data-action="applyTextColor"]'),
     textColorPopover: document.getElementById("text-color-popover"),
     textColorOptions: document.getElementById("text-color-options"),
@@ -1538,6 +1541,7 @@ function bootstrapApp() {
       ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
       ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
       document.removeEventListener("click", handleToolbarOutsideClick);
+      setClozeDropdown(false);
       return;
     }
     const shouldOpen = Boolean(open);
@@ -1557,6 +1561,7 @@ function bootstrapApp() {
       ui.toolbarMorePanel.setAttribute("aria-hidden", "true");
       ui.toolbarMoreBtn.setAttribute("aria-expanded", "false");
       document.removeEventListener("click", handleToolbarOutsideClick);
+      setClozeDropdown(false);
     }
   }
 
@@ -1569,6 +1574,145 @@ function bootstrapApp() {
       return;
     }
     setToolbarMoreMenu(false);
+  }
+
+  function isClozeDropdownOpen() {
+    return Boolean(ui.clozeDropdown && ui.clozeDropdown.classList.contains("is-open"));
+  }
+
+  function getClozeDropdownItems() {
+    if (!ui.clozeDropdownMenu) {
+      return [];
+    }
+    return Array.from(
+      ui.clozeDropdownMenu.querySelectorAll('button[data-action="createCloze"]')
+    );
+  }
+
+  function focusClozeDropdownItem(index) {
+    const items = getClozeDropdownItems();
+    if (items.length === 0) {
+      return;
+    }
+    const normalizedIndex = ((index % items.length) + items.length) % items.length;
+    const target = items[normalizedIndex];
+    if (target) {
+      target.focus();
+    }
+  }
+
+  function setClozeDropdown(open, options = {}) {
+    if (!ui.clozeDropdown || !ui.clozeDropdownToggle || !ui.clozeDropdownMenu) {
+      return;
+    }
+    const shouldOpen = Boolean(open);
+    const isOpen = ui.clozeDropdown.classList.contains("is-open");
+    const focusTarget = options.focusTarget || null;
+
+    if (shouldOpen) {
+      if (!isOpen) {
+        ui.clozeDropdown.classList.add("is-open");
+      }
+      ui.clozeDropdownToggle.setAttribute("aria-expanded", "true");
+      ui.clozeDropdownMenu.removeAttribute("hidden");
+      setTextColorPopover(false);
+      if (focusTarget === "first" || focusTarget === "last") {
+        requestAnimationFrame(() => {
+          const items = getClozeDropdownItems();
+          if (items.length === 0) {
+            return;
+          }
+          const targetIndex = focusTarget === "last" ? items.length - 1 : 0;
+          focusClozeDropdownItem(targetIndex);
+        });
+      } else if (focusTarget === "toggle" && ui.clozeDropdownToggle) {
+        requestAnimationFrame(() => {
+          ui.clozeDropdownToggle.focus();
+        });
+      }
+    } else {
+      if (isOpen) {
+        ui.clozeDropdown.classList.remove("is-open");
+      }
+      ui.clozeDropdownToggle.setAttribute("aria-expanded", "false");
+      if (!ui.clozeDropdownMenu.hasAttribute("hidden")) {
+        ui.clozeDropdownMenu.setAttribute("hidden", "");
+      }
+      if (focusTarget === "toggle" && ui.clozeDropdownToggle) {
+        requestAnimationFrame(() => {
+          ui.clozeDropdownToggle.focus();
+        });
+      }
+    }
+  }
+
+  function toggleClozeDropdown(forceOpen, options = {}) {
+    const shouldOpen =
+      typeof forceOpen === "boolean" ? forceOpen : !isClozeDropdownOpen();
+    setClozeDropdown(shouldOpen, options);
+  }
+
+  function handleClozeDropdownKeydown(event) {
+    if (!ui.clozeDropdown) {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const key = event.key;
+    if (!key) {
+      return;
+    }
+
+    const items = getClozeDropdownItems();
+    const isOpen = isClozeDropdownOpen();
+
+    if (target === ui.clozeDropdownToggle) {
+      if (key === "ArrowDown" || key === "Enter" || key === " ") {
+        event.preventDefault();
+        if (state.isRevisionMode) {
+          return;
+        }
+        toggleClozeDropdown(true, { focusTarget: "first" });
+      } else if (key === "ArrowUp") {
+        event.preventDefault();
+        if (state.isRevisionMode) {
+          return;
+        }
+        toggleClozeDropdown(true, { focusTarget: "last" });
+      } else if (key === "Escape" && isOpen) {
+        event.preventDefault();
+        setClozeDropdown(false, { focusTarget: "toggle" });
+      }
+      return;
+    }
+
+    if (!items.includes(target)) {
+      if (key === "Escape" && isOpen) {
+        event.preventDefault();
+        setClozeDropdown(false, { focusTarget: "toggle" });
+      }
+      return;
+    }
+
+    if (key === "ArrowDown") {
+      event.preventDefault();
+      const index = items.indexOf(target);
+      focusClozeDropdownItem(index + 1);
+    } else if (key === "ArrowUp") {
+      event.preventDefault();
+      const index = items.indexOf(target);
+      focusClozeDropdownItem(index - 1);
+    } else if (key === "Home") {
+      event.preventDefault();
+      focusClozeDropdownItem(0);
+    } else if (key === "End") {
+      event.preventDefault();
+      focusClozeDropdownItem(items.length - 1);
+    } else if (key === "Escape") {
+      event.preventDefault();
+      setClozeDropdown(false, { focusTarget: "toggle" });
+    } else if (key === "Tab") {
+      setClozeDropdown(false);
+    }
   }
 
   function updateToolbarFormattingLayout() {
@@ -3294,10 +3438,14 @@ function bootstrapApp() {
       !state.isRevisionMode &&
       isInputEvent &&
       ((typeof event.inputType === "string" && event.inputType === "insertFromPaste") ||
-        (typeof event.data === "string" && event.data.includes("##")));
+        (typeof event.data === "string" && containsRawClozePattern(event.data)));
 
     const editorHasRawCloze = () =>
-      Boolean(ui.noteEditor && typeof ui.noteEditor.textContent === "string" && ui.noteEditor.textContent.includes("##"));
+      Boolean(
+        ui.noteEditor &&
+          typeof ui.noteEditor.textContent === "string" &&
+          containsRawClozePattern(ui.noteEditor.textContent)
+      );
 
     if (isHashInsertion) {
       rememberEditorSelection();
@@ -3918,13 +4066,77 @@ function bootstrapApp() {
     clozes.forEach((cloze) => refreshClozeElement(cloze));
   }
 
+  function getPriorityFromHashCount(hashCount) {
+    switch (hashCount) {
+      case 1:
+        return CLOZE_PRIORITY.HIGH;
+      case 2:
+        return CLOZE_PRIORITY.MEDIUM;
+      case 3:
+        return CLOZE_PRIORITY.LOW;
+      default:
+        return CLOZE_DEFAULT_PRIORITY;
+    }
+  }
+
+  function normalizeClozePriorityValue(value) {
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (CLOZE_PRIORITY_VALUES.includes(normalized)) {
+        return normalized;
+      }
+    }
+    return CLOZE_DEFAULT_PRIORITY;
+  }
+
+  function forEachRawClozeMatch(text, iteratee) {
+    if (typeof text !== "string" || !text.includes("#")) {
+      return;
+    }
+    const regex = /(#{1,3})([^#]+?)\1/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const [fullMatch, hashes, inner] = match;
+      if (!fullMatch || !inner) {
+        continue;
+      }
+      const start = match.index;
+      const end = start + fullMatch.length;
+      const prevChar = start > 0 ? text[start - 1] : "";
+      const nextChar = end < text.length ? text[end] : "";
+      if (prevChar === "#" || nextChar === "#") {
+        continue;
+      }
+      const shouldStop = iteratee({
+        fullMatch,
+        inner,
+        hashCount: hashes.length,
+        start,
+        end,
+      });
+      if (shouldStop === true) {
+        break;
+      }
+    }
+  }
+
+  function containsRawClozePattern(text) {
+    let found = false;
+    forEachRawClozeMatch(text, () => {
+      found = true;
+      return true;
+    });
+    return found;
+  }
+
   function applyClozeShortcut() {
     if (state.isRevisionMode || !ui.noteEditor) {
       return { success: false };
     }
 
     const editor = ui.noteEditor;
-    if (!editor.textContent || !editor.textContent.includes("##")) {
+    const textContent = editor.textContent || "";
+    if (!containsRawClozePattern(textContent)) {
       return { success: false };
     }
 
@@ -3948,26 +4160,14 @@ function bootstrapApp() {
         traversed += length;
         continue;
       }
-      if (!value.includes("##")) {
+      if (!value.includes("#")) {
         traversed += length;
         continue;
       }
 
-      const regex = /##([^#]+?)##/g;
-      let match;
-      while ((match = regex.exec(value)) !== null) {
-        const fullMatch = match[0];
-        if (!fullMatch) {
-          continue;
-        }
-        const innerContent = fullMatch.slice(2, -2);
-        if (!innerContent) {
-          continue;
-        }
-        const start = match.index;
-        const end = start + fullMatch.length;
+      forEachRawClozeMatch(value, ({ inner, hashCount, start, end }) => {
         if (end <= start) {
-          continue;
+          return false;
         }
 
         const globalStart = traversed + start;
@@ -3990,7 +4190,8 @@ function bootstrapApp() {
           node: textNode,
           start,
           end,
-          inner: innerContent,
+          inner,
+          priority: getPriorityFromHashCount(hashCount),
           containsCaret,
           distance,
           globalStart,
@@ -4012,9 +4213,10 @@ function bootstrapApp() {
 
         if (candidate.containsCaret) {
           stopSearch = true;
-          break;
+          return true;
         }
-      }
+        return false;
+      });
 
       traversed += length;
     }
@@ -4023,7 +4225,7 @@ function bootstrapApp() {
       return { success: false };
     }
 
-    const { node, start, end, inner } = bestMatch;
+    const { node, start, end, inner, priority } = bestMatch;
     const range = document.createRange();
     range.setStart(node, start);
     range.setEnd(node, end);
@@ -4032,6 +4234,7 @@ function bootstrapApp() {
     wrapper.className = "cloze";
     wrapper.dataset.placeholder = generateClozePlaceholder();
     wrapper.dataset.points = "0";
+    wrapper.dataset.priority = priority || CLOZE_DEFAULT_PRIORITY;
     wrapper.classList.add("cloze-masked");
 
     const innerNode = document.createTextNode(inner);
@@ -4060,7 +4263,7 @@ function bootstrapApp() {
     };
   }
 
-  function createClozeFromSelection() {
+  function createClozeFromSelection(priority = CLOZE_DEFAULT_PRIORITY) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       showToast("Sélectionnez du texte à transformer en trou.", "warning");
@@ -4081,6 +4284,7 @@ function bootstrapApp() {
     const placeholder = generateClozePlaceholder();
     wrapper.dataset.placeholder = placeholder;
     wrapper.dataset.points = "0";
+    wrapper.dataset.priority = normalizeClozePriorityValue(priority);
     wrapper.classList.add("cloze-masked");
 
     const fragment = range.extractContents();
@@ -4605,6 +4809,13 @@ function bootstrapApp() {
       }
     }
 
+    if (isClozeDropdownOpen() && ui.clozeDropdown) {
+      const insideDropdown = targetNode && ui.clozeDropdown.contains(targetNode);
+      if (!insideDropdown) {
+        setClozeDropdown(false);
+      }
+    }
+
     if (!ui.clozeFeedback || ui.clozeFeedback.classList.contains("hidden")) {
       return;
     }
@@ -4624,6 +4835,7 @@ function bootstrapApp() {
       event.preventDefault();
       return;
     }
+    setClozeDropdown(false);
     let value = select.value;
     const command = select.dataset.command;
     if (command === "formatBlock" && value && !value.startsWith("<")) {
@@ -4643,11 +4855,17 @@ function bootstrapApp() {
     if (command || (action && action !== "applyTextColor")) {
       setTextColorPopover(false);
     }
+    if (command || (action && action !== "toggleClozeDropdown")) {
+      setClozeDropdown(false);
+    }
     if (state.isRevisionMode) {
       if (action === "startIteration") {
         event.preventDefault();
         startNewIteration();
         return;
+      }
+      if (action === "toggleClozeDropdown") {
+        setClozeDropdown(false);
       }
       event.preventDefault();
       return;
@@ -4677,11 +4895,20 @@ function bootstrapApp() {
       } else if (action === "decreaseFontSize") {
         handledBySelectionHelper = true;
         adjustFontSize(-1);
+      } else if (action === "toggleClozeDropdown") {
+        event.preventDefault();
+        handledBySelectionHelper = true;
+        toggleClozeDropdown();
       } else if (action === "createCloze") {
         handledBySelectionHelper = true;
+        const priority = normalizeClozePriorityValue(button.dataset.priority);
+        const insideDropdownMenu = Boolean(button.closest(".toolbar-dropdown-menu"));
         runWithPreservedSelection(() => {
-          createClozeFromSelection();
+          createClozeFromSelection(priority);
         });
+        if (insideDropdownMenu) {
+          setClozeDropdown(false, { focusTarget: "toggle" });
+        }
       } else if (action === "startIteration") {
         startNewIteration();
       }
@@ -4691,6 +4918,7 @@ function bootstrapApp() {
     }
     if (
       action !== "applyTextColor" &&
+      action !== "toggleClozeDropdown" &&
       mobileMediaQuery.matches &&
       ui.toolbarMorePanel &&
       ui.toolbarMorePanel.classList.contains("is-open") &&
@@ -5237,6 +5465,9 @@ function bootstrapApp() {
     ui.toolbar.addEventListener("change", handleToolbarChange);
     if (ui.toolbarMoreBtn) {
       ui.toolbarMoreBtn.addEventListener("click", () => toggleToolbarMoreMenu());
+    }
+    if (ui.clozeDropdown) {
+      ui.clozeDropdown.addEventListener("keydown", handleClozeDropdownKeydown);
     }
     if (ui.clozeFeedback) {
       ui.clozeFeedback.addEventListener("click", handleClozeFeedbackClick);
