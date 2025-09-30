@@ -293,7 +293,7 @@ function bootstrapApp() {
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
     share: createShareState(),
-    visibleClozePriorities: new Set(CLOZE_PRIORITY_VALUES),
+    visibleClozePriorities: new Set(),
     isClozeFilterMenuOpen: false,
   };
 
@@ -335,7 +335,7 @@ function bootstrapApp() {
 
   function ensureVisibleClozePriorities() {
     if (!(state.visibleClozePriorities instanceof Set)) {
-      state.visibleClozePriorities = new Set(CLOZE_PRIORITY_VALUES);
+      state.visibleClozePriorities = new Set();
     }
     return state.visibleClozePriorities;
   }
@@ -5801,6 +5801,7 @@ function bootstrapApp() {
   initTextColorControls();
   showAuthView(state.activeAuthView);
   initEvents();
+  updateClozeVisibilityForFilter();
   updateShareButtonState();
   updateToolbarFormattingLayout();
   if (typeof mobileMediaQuery.addEventListener === "function") {
