@@ -4005,6 +4005,17 @@ function bootstrapApp() {
     return normalized;
   }
 
+  function setClozePriority(cloze, priority) {
+    if (!cloze) {
+      return CLOZE_DEFAULT_PRIORITY;
+    }
+    const normalized = normalizeClozePriorityValue(priority);
+    cloze.dataset.priority = normalized;
+    refreshClozeElement(cloze);
+    handleEditorInput({ bypassReadOnly: true });
+    return normalized;
+  }
+
   function updateClozeTooltip(cloze, pointsValue = null) {
     if (!cloze) return;
     const points = pointsValue === null ? getClozePoints(cloze) : pointsValue;
@@ -4732,6 +4743,18 @@ function bootstrapApp() {
     ui.clozeFeedback.classList.remove("hidden");
     positionClozeFeedback(target);
     requestAnimationFrame(() => positionClozeFeedback(target));
+
+    const currentPriority = getClozePriority(target);
+    const priorityButtons = ui.clozeFeedback.querySelectorAll("button[data-priority]");
+    priorityButtons.forEach((button) => {
+      const isSelected = button.dataset.priority === currentPriority;
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      if (isSelected) {
+        button.dataset.selected = "true";
+      } else {
+        delete button.dataset.selected;
+      }
+    });
   }
 
   function handleEditorClick(event) {
@@ -4761,13 +4784,31 @@ function bootstrapApp() {
   }
 
   function handleClozeFeedbackClick(event) {
-    const button = closestElement(event.target, "button[data-feedback]");
+    const button = closestElement(event.target, "button");
     if (!button) return;
-    event.preventDefault();
+
     const cloze = state.activeCloze;
+    if (!cloze) {
+      hideClozeFeedback();
+      return;
+    }
+
+    const priorityValue = button.dataset.priority;
+    if (priorityValue) {
+      event.preventDefault();
+      setClozePriority(cloze, priorityValue);
+      showClozeFeedback(cloze);
+      return;
+    }
+
     const feedbackKey = button.dataset.feedback;
+    if (!feedbackKey) {
+      return;
+    }
+
+    event.preventDefault();
     const feedback = CLOZE_FEEDBACK_RULES[feedbackKey];
-    if (!cloze || !feedback) {
+    if (!feedback) {
       hideClozeFeedback();
       return;
     }
