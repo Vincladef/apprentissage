@@ -1785,8 +1785,21 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .editor .cloze.cloze-masked {
   color: transparent;
   position: relative;
+}
+
+.editor .cloze.cloze-masked.cloze-priority-high {
   background: rgba(95, 99, 104, 0.16);
   border-color: rgba(95, 99, 104, 0.45);
+}
+
+.editor .cloze.cloze-masked.cloze-priority-medium {
+  background: #ffffff;
+  border-color: rgba(95, 99, 104, 0.45);
+}
+
+.editor .cloze.cloze-masked.cloze-priority-low {
+  background: #ffffff;
+  border-color: rgba(95, 99, 104, 0.35);
 }
 
 .editor .cloze.cloze-masked::after {
