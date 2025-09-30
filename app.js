@@ -171,6 +171,19 @@ function bootstrapApp() {
     "cloze-status-neutral",
     "cloze-status-negative"
   ];
+  const CLOZE_PRIORITY = {
+    HIGH: "high",
+    MEDIUM: "medium",
+    LOW: "low"
+  };
+  const CLOZE_PRIORITY_VALUES = Object.values(CLOZE_PRIORITY);
+  const CLOZE_DEFAULT_PRIORITY = CLOZE_PRIORITY.MEDIUM;
+  const CLOZE_PRIORITY_CLASS_MAP = {
+    [CLOZE_PRIORITY.HIGH]: "cloze-priority-high",
+    [CLOZE_PRIORITY.MEDIUM]: "cloze-priority-medium",
+    [CLOZE_PRIORITY.LOW]: "cloze-priority-low"
+  };
+  const CLOZE_PRIORITY_CLASSES = Object.values(CLOZE_PRIORITY_CLASS_MAP);
   const CLOZE_DEFER_DATA_KEY = "deferMask";
   const CLOZE_MANUAL_REVEAL_SET_KEY = "revealedClozes";
   const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
@@ -3794,6 +3807,20 @@ function bootstrapApp() {
     return normalizeClozePoints(cloze.dataset.points);
   }
 
+  function getClozePriority(cloze) {
+    if (!cloze || !cloze.dataset) {
+      return CLOZE_DEFAULT_PRIORITY;
+    }
+    const rawPriority = cloze.dataset.priority;
+    if (typeof rawPriority === "string") {
+      const normalized = rawPriority.trim().toLowerCase();
+      if (CLOZE_PRIORITY_VALUES.includes(normalized)) {
+        return normalized;
+      }
+    }
+    return CLOZE_DEFAULT_PRIORITY;
+  }
+
   function shouldMaskCloze(cloze, pointsValue = null) {
     if (!cloze) return true;
     if (cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1") {
@@ -3866,6 +3893,15 @@ function bootstrapApp() {
     }
     if (!cloze.dataset.placeholder) {
       cloze.dataset.placeholder = generateClozePlaceholder();
+    }
+    const priority = getClozePriority(cloze);
+    cloze.dataset.priority = priority;
+    CLOZE_PRIORITY_CLASSES.forEach((className) => {
+      cloze.classList.remove(className);
+    });
+    const priorityClassName = CLOZE_PRIORITY_CLASS_MAP[priority];
+    if (priorityClassName) {
+      cloze.classList.add(priorityClassName);
     }
     const points = setClozePoints(cloze, getClozePoints(cloze));
     if (shouldMaskCloze(cloze, points)) {

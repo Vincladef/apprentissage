@@ -1472,6 +1472,54 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.22);
 }
 
+.editor .cloze.cloze-priority-high,
+.editor .cloze.cloze-priority-medium,
+.editor .cloze.cloze-priority-low {
+  position: relative;
+}
+
+.editor .cloze.cloze-priority-high {
+  border-bottom-style: double;
+}
+
+.editor .cloze.cloze-priority-medium {
+  border-bottom-style: dashed;
+}
+
+.editor .cloze.cloze-priority-low {
+  border-bottom-style: dotted;
+}
+
+.editor .cloze.cloze-priority-high::before,
+.editor .cloze.cloze-priority-medium::before,
+.editor .cloze.cloze-priority-low::before {
+  display: inline-block;
+  font-size: 0.75rem;
+  line-height: 1;
+  margin-right: 0.2rem;
+  color: currentColor;
+  font-weight: 700;
+  content: "";
+}
+
+.editor .cloze.cloze-priority-high::before {
+  content: "🔺";
+}
+
+.editor .cloze.cloze-priority-medium::before {
+  content: "⬡";
+}
+
+.editor .cloze.cloze-priority-low::before {
+  content: "🔻";
+}
+
+.editor .cloze.cloze-masked.cloze-priority-high::before,
+.editor .cloze.cloze-masked.cloze-priority-medium::before,
+.editor .cloze.cloze-masked.cloze-priority-low::before {
+  color: var(--accent-strong);
+}
+
 .editor .cloze:not(.cloze-masked) {
   cursor: text;
   color: var(--fg);
