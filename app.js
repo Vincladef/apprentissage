@@ -4134,9 +4134,13 @@ function bootstrapApp() {
     if (state[CLOZE_MANUAL_REVEAL_SET_KEY] && state[CLOZE_MANUAL_REVEAL_SET_KEY].has(cloze)) {
       return false;
     }
-    const score =
-      scoreValue === null ? getClozeScore(cloze) : clampClozeScore(scoreValue);
-    return score <= 0;
+    let delay = getClozeRevisionDelay(cloze);
+    if (delay === null) {
+      const score =
+        scoreValue === null ? getClozeScore(cloze) : clampClozeScore(scoreValue);
+      delay = computeRevisionDelay(score);
+    }
+    return delay === null || delay <= 0;
   }
 
   function updateClozeMaskState(cloze, shouldMask) {
