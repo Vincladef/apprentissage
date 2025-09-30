@@ -4658,6 +4658,7 @@ function bootstrapApp() {
     let changed = false;
     let reactivatedCount = 0;
     let skippedCount = 0;
+    let hasDueCloze = false;
 
     clozes.forEach((cloze) => {
       delete cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
@@ -4672,11 +4673,13 @@ function bootstrapApp() {
       if (hadDeferred) {
         delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
         changed = true;
-        reactivatedCount += 1;
       }
 
+      const previousDelay = getClozeRevisionDelay(cloze);
+      const wasDueBeforeIteration =
+        hadDeferred || (previousDelay !== null && previousDelay <= 0);
       const currentScore = getClozeScore(cloze);
-      let delay = getClozeRevisionDelay(cloze);
+      let delay = previousDelay;
       if (delay === null) {
         const { delay: computedDelay, changed: delayChanged } =
           updateClozeRevisionDelayFromScore(cloze, currentScore);
@@ -4710,9 +4713,12 @@ function bootstrapApp() {
       }
 
       if (isDueNow) {
-        cloze.dataset[CLOZE_DEFER_DATA_KEY] = "1";
-        if (!hadDeferred) {
-          reactivatedCount += 1;
+        if (cloze.dataset[CLOZE_DEFER_DATA_KEY]) {
+          delete cloze.dataset[CLOZE_DEFER_DATA_KEY];
+        }
+        hasDueCloze = true;
+        reactivatedCount += 1;
+        if (!wasDueBeforeIteration) {
           changed = true;
         }
       }
@@ -4723,8 +4729,11 @@ function bootstrapApp() {
 
     refreshAllClozes();
 
+    const shouldShowSummary = changed || hasDueCloze || skippedCount > 0;
     if (changed) {
       handleEditorInput({ bypassReadOnly: true });
+    }
+    if (shouldShowSummary) {
       const messages = [];
       if (reactivatedCount > 0) {
         const plural = reactivatedCount > 1 ? "s" : "";
@@ -4737,7 +4746,8 @@ function bootstrapApp() {
       const combinedMessage = messages.length
         ? messages.join(" ")
         : "Délais mis à jour.";
-      showToast(`Nouvelle itération : ${combinedMessage}`, "success");
+      const toastType = changed || hasDueCloze ? "success" : "info";
+      showToast(`Nouvelle itération : ${combinedMessage}`, toastType);
     } else {
       showToast("Nouvelle itération : aucun délai à ajuster.", "info");
     }
