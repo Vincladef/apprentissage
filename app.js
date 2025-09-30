@@ -2011,9 +2011,7 @@ function bootstrapApp() {
     if (wrapper) {
       wrapper.classList.remove('editor-image--cropping');
     }
-    const savedSelection = imageCropState.savedSelection
-      ? { ...imageCropState.savedSelection }
-      : null;
+    const savedSelection = cloneSelectionInfo(imageCropState.savedSelection);
     resetImageCropState();
     if (cancel && savedSelection) {
       state.savedSelection = savedSelection;
@@ -2047,7 +2045,7 @@ function bootstrapApp() {
     imageCropState.startX = 0;
     imageCropState.startY = 0;
     imageCropState.lastRect = null;
-    imageCropState.savedSelection = state.savedSelection ? { ...state.savedSelection } : null;
+    imageCropState.savedSelection = cloneSelectionInfo(state.savedSelection);
 
     if (rectElement) {
       rectElement.setAttribute('hidden', 'hidden');
@@ -2120,9 +2118,7 @@ function bootstrapApp() {
     enhanceEditorImages();
     handleEditorInput({ bypassReadOnly: true });
 
-    const savedSelection = imageCropState.savedSelection
-      ? { ...imageCropState.savedSelection }
-      : null;
+    const savedSelection = cloneSelectionInfo(imageCropState.savedSelection);
     if (savedSelection) {
       state.savedSelection = savedSelection;
     }
@@ -2328,9 +2324,7 @@ function bootstrapApp() {
       }
 
       rememberEditorSelection();
-      imageResizeState.savedSelection = state.savedSelection
-        ? { ...state.savedSelection }
-        : null;
+      imageResizeState.savedSelection = cloneSelectionInfo(state.savedSelection);
       isImageResizeActive = true;
 
       event.preventDefault();
@@ -2522,9 +2516,7 @@ function bootstrapApp() {
       return;
     }
     const { handle, wrapper, img, hasChanges } = imageResizeState;
-    const savedSelection = imageResizeState.savedSelection
-      ? { ...imageResizeState.savedSelection }
-      : null;
+    const savedSelection = cloneSelectionInfo(imageResizeState.savedSelection);
 
     event.preventDefault();
 
@@ -2558,9 +2550,7 @@ function bootstrapApp() {
       return;
     }
     const { handle, wrapper, img } = imageResizeState;
-    const savedSelection = imageResizeState.savedSelection
-      ? { ...imageResizeState.savedSelection }
-      : null;
+    const savedSelection = cloneSelectionInfo(imageResizeState.savedSelection);
     if (handle && typeof handle.releasePointerCapture === 'function') {
       try {
         handle.releasePointerCapture(event.pointerId);
@@ -2588,7 +2578,7 @@ function bootstrapApp() {
     if (!wrapper || !img) return;
 
     const direction = target.dataset.handle || '';
-    const savedSelection = state.savedSelection ? { ...state.savedSelection } : null;
+    const savedSelection = cloneSelectionInfo(state.savedSelection);
 
     if (event.key === 'c' || event.key === 'C' || event.key === 'Enter') {
       event.preventDefault();
@@ -3298,9 +3288,7 @@ function bootstrapApp() {
 
     if (isHashInsertion) {
       rememberEditorSelection();
-      const selectionBeforeShortcut = state.savedSelection
-        ? { ...state.savedSelection }
-        : null;
+      const selectionBeforeShortcut = cloneSelectionInfo(state.savedSelection);
       const transformedResult = runWithPreservedSelection(() => applyClozeShortcut());
       const transformed =
         transformedResult && typeof transformedResult === "object"
@@ -3313,9 +3301,7 @@ function bootstrapApp() {
 
     if (isPasteInsertion && editorHasRawCloze()) {
       rememberEditorSelection();
-      const selectionBeforeShortcut = state.savedSelection
-        ? { ...state.savedSelection }
-        : null;
+      const selectionBeforeShortcut = cloneSelectionInfo(state.savedSelection);
       let transformedAtLeastOnce = false;
       let attempts = 0;
       const MAX_TRANSFORMS = 200;
@@ -3347,6 +3333,87 @@ function bootstrapApp() {
     }
   }
 
+  function getNodePath(root, node) {
+    if (!root || !node) {
+      return null;
+    }
+    const path = [];
+    let current = node;
+    while (current && current !== root) {
+      const parent = current.parentNode;
+      if (!parent) {
+        return null;
+      }
+      const index = Array.prototype.indexOf.call(parent.childNodes, current);
+      if (index === -1) {
+        return null;
+      }
+      path.unshift(index);
+      current = parent;
+    }
+    if (current !== root) {
+      return null;
+    }
+    return path;
+  }
+
+  function getNodeFromPath(root, path) {
+    if (!root || !Array.isArray(path)) {
+      return null;
+    }
+    let current = root;
+    for (let i = 0; i < path.length; i += 1) {
+      const index = path[i];
+      if (
+        !current ||
+        !current.childNodes ||
+        typeof index !== "number" ||
+        index < 0 ||
+        index >= current.childNodes.length
+      ) {
+        return null;
+      }
+      current = current.childNodes[index];
+    }
+    return current;
+  }
+
+  function normalizeRangeOffset(node, offset) {
+    if (!node) {
+      return 0;
+    }
+    const maxOffset =
+      node.nodeType === Node.TEXT_NODE
+        ? node.length
+        : node.childNodes
+        ? node.childNodes.length
+        : 0;
+    if (typeof offset !== "number" || Number.isNaN(offset)) {
+      return maxOffset;
+    }
+    if (offset < 0) {
+      return 0;
+    }
+    if (offset > maxOffset) {
+      return maxOffset;
+    }
+    return offset;
+  }
+
+  function cloneSelectionInfo(selection) {
+    if (!selection || typeof selection !== "object") {
+      return null;
+    }
+    const cloned = { ...selection };
+    if (Array.isArray(selection.startPath)) {
+      cloned.startPath = [...selection.startPath];
+    }
+    if (Array.isArray(selection.endPath)) {
+      cloned.endPath = [...selection.endPath];
+    }
+    return cloned;
+  }
+
   function captureSelection(container) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return null;
@@ -3358,7 +3425,17 @@ function bootstrapApp() {
     preRange.selectNodeContents(container);
     preRange.setEnd(range.startContainer, range.startOffset);
     const start = preRange.toString().length;
-    return { start, end: start + range.toString().length };
+    const end = start + range.toString().length;
+    const startPath = getNodePath(container, range.startContainer);
+    const endPath = getNodePath(container, range.endContainer);
+    return {
+      start,
+      end,
+      startPath,
+      endPath,
+      startOffset: range.startOffset,
+      endOffset: range.endOffset,
+    };
   }
 
   function restoreSelection(container, saved) {
@@ -3366,48 +3443,76 @@ function bootstrapApp() {
     const selection = window.getSelection();
     if (!selection) return;
     const range = document.createRange();
-    let charIndex = 0;
     let startNode = null;
     let endNode = null;
-    let startOffset = 0;
-    let endOffset = 0;
+    let startOffset = saved.startOffset;
+    let endOffset = saved.endOffset;
 
-    const traverse = (node) => {
-      if (endNode) return;
-      if (node.nodeType === Node.TEXT_NODE) {
-        const nextCharIndex = charIndex + node.length;
-        if (!startNode && saved.start >= charIndex && saved.start <= nextCharIndex) {
-          startNode = node;
-          startOffset = saved.start - charIndex;
-        }
-        if (!endNode && saved.end >= charIndex && saved.end <= nextCharIndex) {
-          endNode = node;
-          endOffset = saved.end - charIndex;
-        }
-        charIndex = nextCharIndex;
+    const startPath = Array.isArray(saved.startPath) ? saved.startPath : null;
+    const endPath = Array.isArray(saved.endPath) ? saved.endPath : null;
+
+    if (startPath && endPath) {
+      startNode = getNodeFromPath(container, startPath);
+      endNode = getNodeFromPath(container, endPath);
+      if (startNode && endNode) {
+        startOffset = normalizeRangeOffset(startNode, startOffset);
+        endOffset = normalizeRangeOffset(endNode, endOffset);
       } else {
-        for (let i = 0; i < node.childNodes.length; i += 1) {
-          traverse(node.childNodes[i]);
-          if (endNode) {
-            break;
+        startNode = null;
+        endNode = null;
+      }
+    }
+
+    if (!startNode || !endNode) {
+      let charIndex = 0;
+      let fallbackStartNode = null;
+      let fallbackEndNode = null;
+      let fallbackStartOffset = 0;
+      let fallbackEndOffset = 0;
+
+      const traverse = (node) => {
+        if (fallbackEndNode) return;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const nextCharIndex = charIndex + node.length;
+          if (
+            !fallbackStartNode &&
+            typeof saved.start === "number" &&
+            saved.start >= charIndex &&
+            saved.start <= nextCharIndex
+          ) {
+            fallbackStartNode = node;
+            fallbackStartOffset = saved.start - charIndex;
+          }
+          if (
+            !fallbackEndNode &&
+            typeof saved.end === "number" &&
+            saved.end >= charIndex &&
+            saved.end <= nextCharIndex
+          ) {
+            fallbackEndNode = node;
+            fallbackEndOffset = saved.end - charIndex;
+          }
+          charIndex = nextCharIndex;
+        } else {
+          for (let i = 0; i < node.childNodes.length; i += 1) {
+            traverse(node.childNodes[i]);
+            if (fallbackEndNode) {
+              break;
+            }
           }
         }
-      }
-    };
+      };
 
-    traverse(container);
+      traverse(container);
 
-    if (!startNode) {
-      startNode = container;
-      startOffset = container.childNodes.length;
-    }
-    if (!endNode) {
-      endNode = startNode;
-      endOffset = startOffset;
+      startNode = fallbackStartNode || container;
+      endNode = fallbackEndNode || startNode;
+      startOffset = normalizeRangeOffset(startNode, fallbackStartOffset);
+      endOffset = normalizeRangeOffset(endNode, fallbackEndOffset);
     }
 
-    range.setStart(startNode, Math.max(0, startOffset));
-    range.setEnd(endNode, Math.max(0, endOffset));
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
 
     const isCollapsedSelection =
       typeof saved.start === "number" &&
