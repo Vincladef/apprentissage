@@ -74,14 +74,59 @@
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          id="revision-iteration-btn"
-          class="header-iteration-btn"
-          aria-label="Lancer une nouvelle itération"
-        >
-          Nouvelle itération
-        </button>
+        <div class="header-iteration-controls">
+          <button
+            type="button"
+            id="revision-iteration-btn"
+            class="header-iteration-btn"
+            aria-label="Lancer une nouvelle itération"
+          >
+            Nouvelle itération
+          </button>
+          <div class="header-filter" data-filter="cloze-priority">
+            <button
+              type="button"
+              id="cloze-filter-btn"
+              class="header-icon-button header-filter-btn"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-controls="cloze-filter-menu"
+              aria-pressed="false"
+            >
+              <span aria-hidden="true">👁</span>
+              <span class="sr-only">Filtrer les textes à trous par priorité</span>
+            </button>
+            <div
+              id="cloze-filter-menu"
+              class="header-filter-menu"
+              role="group"
+              aria-labelledby="cloze-filter-btn"
+              aria-hidden="true"
+              hidden
+              tabindex="-1"
+            >
+              <fieldset class="header-filter-fieldset">
+                <legend class="sr-only">Priorités des textes à trous à afficher</legend>
+                <label class="header-filter-option">
+                  <input type="checkbox" data-priority="all" checked />
+                  <span>Tout afficher</span>
+                </label>
+                <label class="header-filter-option">
+                  <input type="checkbox" data-priority="high" checked />
+                  <span>Priorité haute</span>
+                </label>
+                <label class="header-filter-option">
+                  <input type="checkbox" data-priority="medium" checked />
+                  <span>Priorité moyenne</span>
+                </label>
+                <label class="header-filter-option">
+                  <input type="checkbox" data-priority="low" checked />
+                  <span>Priorité basse</span>
+                </label>
+              </fieldset>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="header-toolbar">
         <div class="editor-toolbar" role="toolbar" aria-label="Outils de mise en forme">
