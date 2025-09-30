@@ -4364,9 +4364,18 @@ function bootstrapApp() {
       const hasPositiveScore = getClozeScore(cloze) > 0;
       const hasSpacedRepetitionOverride = hasDeferredReveal || hasPositiveScore;
       const hasManualOverride =
-        hasManualRevealAttr || hasPriorityManualReveal || manualRevealSet.has(cloze);
-      const shouldHideForPriority =
-        !isVisible && !hasSpacedRepetitionOverride && !hasManualOverride;
+        isVisible &&
+        (hasManualRevealAttr ||
+          hasPriorityManualReveal ||
+          manualRevealSet.has(cloze));
+      const shouldHideForPriority = !isVisible && !hasSpacedRepetitionOverride;
+
+      if (!isVisible) {
+        if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+          delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+        }
+        manualRevealSet.delete(cloze);
+      }
 
       if (shouldHideForPriority) {
         cloze.classList.add("cloze-priority-hidden");
