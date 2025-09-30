@@ -187,6 +187,7 @@ function bootstrapApp() {
   const CLOZE_DEFER_DATA_KEY = "deferMask";
   const CLOZE_MANUAL_REVEAL_SET_KEY = "revealedClozes";
   const CLOZE_MANUAL_REVEAL_DATASET_KEY = "manualReveal";
+  const CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY = "priorityManualReveal";
   const CLOZE_PRIORITY_FILTER_DATASET_KEY = "priorityHidden";
   const CLOZE_MANUAL_REVEAL_ATTR = "data-manual-reveal";
 
@@ -3999,6 +4000,9 @@ function bootstrapApp() {
     if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] === "1") {
       return true;
     }
+    if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1") {
+      return false;
+    }
     if (cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1") {
       return false;
     }
@@ -4235,13 +4239,27 @@ function bootstrapApp() {
       if (shouldFilter) {
         if (isPriorityHidden) {
           cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] = "1";
+          if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+            delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+          }
         } else {
           delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+          cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
         }
         refreshClozeElement(cloze);
-      } else if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
-        delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
-        refreshClozeElement(cloze);
+      } else {
+        let didUpdate = false;
+        if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
+          delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+          didUpdate = true;
+        }
+        if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+          delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+          didUpdate = true;
+        }
+        if (didUpdate) {
+          refreshClozeElement(cloze);
+        }
       }
     });
     if (state.activeCloze && state.activeCloze.classList.contains("cloze-priority-hidden")) {
