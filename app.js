@@ -3549,6 +3549,144 @@ function bootstrapApp() {
     }
   }
 
+  async function handleEditorPaste(event) {
+    if (!ui.noteEditor || !state.currentNote) {
+      return;
+    }
+    if (!event || typeof event !== "object") {
+      return;
+    }
+    if (typeof ClipboardEvent !== "undefined" && !(event instanceof ClipboardEvent)) {
+      return;
+    }
+    if (state.isRevisionMode) {
+      return;
+    }
+
+    const { clipboardData } = event;
+    if (!clipboardData) {
+      return;
+    }
+
+    const potentialFiles = [];
+    if (clipboardData.files && clipboardData.files.length) {
+      potentialFiles.push(...Array.from(clipboardData.files));
+    }
+    if (clipboardData.items && clipboardData.items.length) {
+      Array.from(clipboardData.items).forEach((item) => {
+        if (item && item.kind === "file" && typeof item.getAsFile === "function") {
+          const file = item.getAsFile();
+          if (file) {
+            potentialFiles.push(file);
+          }
+        }
+      });
+    }
+
+    const seenFiles = new Set();
+    const imageFiles = potentialFiles.filter((file) => {
+      if (!file) {
+        return false;
+      }
+      if (typeof Blob !== "undefined" && !(file instanceof Blob)) {
+        return false;
+      }
+      if (seenFiles.has(file)) {
+        return false;
+      }
+      const type = typeof file.type === "string" ? file.type : "";
+      const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+      const isImageType = type.startsWith("image/");
+      const isImageByExtension = /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|tif|tiff)$/i.test(name);
+      if (!isImageType && !isImageByExtension) {
+        return false;
+      }
+      seenFiles.add(file);
+      return true;
+    });
+
+    if (!imageFiles.length) {
+      return;
+    }
+
+    event.preventDefault();
+    rememberEditorSelection(event);
+
+    const readFileAsDataURL = (file) =>
+      new Promise((resolve, reject) => {
+        if (!(typeof Blob !== "undefined" && file instanceof Blob)) {
+          reject(new Error("Type de fichier invalide"));
+          return;
+        }
+        if (typeof FileReader === "undefined") {
+          if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+            resolve(URL.createObjectURL(file));
+            return;
+          }
+          reject(new Error("FileReader n'est pas disponible"));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("Lecture du fichier échouée"));
+        reader.readAsDataURL(file);
+      });
+
+    let insertedAtLeastOnce = false;
+
+    for (const file of imageFiles) {
+      try {
+        const dataUrl = await readFileAsDataURL(file);
+        if (typeof dataUrl !== "string") {
+          continue;
+        }
+        const shouldRevokeObjectUrl =
+          typeof URL !== "undefined" &&
+          typeof URL.revokeObjectURL === "function" &&
+          typeof dataUrl === "string" &&
+          dataUrl.startsWith("blob:");
+
+        runWithPreservedSelection(() => {
+          const selection = window.getSelection();
+          let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+          if (!range) {
+            range = document.createRange();
+            range.selectNodeContents(ui.noteEditor);
+            range.collapse(false);
+          }
+          const image = document.createElement("img");
+          image.src = dataUrl;
+          if (shouldRevokeObjectUrl) {
+            const release = () => {
+              try {
+                URL.revokeObjectURL(dataUrl);
+              } catch (revokeError) {}
+            };
+            image.addEventListener("load", release, { once: true });
+            image.addEventListener("error", release, { once: true });
+          }
+          range.deleteContents();
+          range.insertNode(image);
+          range.setStartAfter(image);
+          range.collapse(true);
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+          return image;
+        });
+        insertedAtLeastOnce = true;
+      } catch (error) {
+        console.error("Impossible de traiter l'image collée", error);
+      }
+    }
+
+    if (insertedAtLeastOnce) {
+      enhanceEditorImages();
+      handleEditorInput({ bypassReadOnly: false });
+    }
+  }
+
   function getNodePath(root, node) {
     if (!root || !node) {
       return null;
@@ -6027,6 +6165,7 @@ function bootstrapApp() {
     }
     ui.noteTitle.addEventListener("input", handleTitleInput);
     ui.noteEditor.addEventListener("input", handleEditorInput);
+    ui.noteEditor.addEventListener("paste", handleEditorPaste);
     ui.noteEditor.addEventListener("click", handleEditorClick);
     ui.noteEditor.addEventListener("scroll", hideClozeFeedback);
     ui.noteEditor.addEventListener("focus", handleEditorFocus);
