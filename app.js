@@ -3609,6 +3609,63 @@ function bootstrapApp() {
       return;
     }
 
+    let htmlClipboardData = "";
+    let textClipboardData = "";
+    try {
+      const htmlData = clipboardData.getData && clipboardData.getData("text/html");
+      if (typeof htmlData === "string") {
+        htmlClipboardData = htmlData;
+      }
+    } catch (clipboardError) {
+      console.error("Impossible de lire text/html depuis le presse-papiers", clipboardError);
+    }
+    try {
+      const textData = clipboardData.getData && clipboardData.getData("text/plain");
+      if (typeof textData === "string") {
+        textClipboardData = textData;
+      }
+    } catch (clipboardError) {
+      console.error("Impossible de lire text/plain depuis le presse-papiers", clipboardError);
+    }
+
+    const hasPlainText =
+      typeof textClipboardData === "string" && textClipboardData.trim() !== "";
+    const hasHtmlText = (() => {
+      if (typeof htmlClipboardData !== "string" || htmlClipboardData.trim() === "") {
+        return false;
+      }
+      if (typeof document === "undefined") {
+        const textOnly = htmlClipboardData
+          .replace(/<img[^>]*>/gi, "")
+          .replace(/<figure[^>]*>[\s\S]*?<\/figure>/gi, "")
+          .replace(/<br\s*\/?>(\r\n|\n|\r)?/gi, " ")
+          .replace(/<[^>]+>/g, "")
+          .replace(/&nbsp;/gi, " ")
+          .trim();
+        return textOnly !== "";
+      }
+      const tempContainer = document.createElement("div");
+      tempContainer.innerHTML = htmlClipboardData;
+      const textContent = (tempContainer.textContent || "").trim();
+      tempContainer.remove();
+      return textContent !== "";
+    })();
+
+    const hasTextContent = hasPlainText || hasHtmlText;
+
+    if (hasTextContent) {
+      const runEnhancements = () => {
+        enhanceEditorImages();
+        handleEditorInput({ bypassReadOnly: false });
+      };
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(runEnhancements);
+      } else {
+        runEnhancements();
+      }
+      return;
+    }
+
     event.preventDefault();
     rememberEditorSelection(event);
 
