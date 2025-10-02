@@ -4607,6 +4607,65 @@ function bootstrapApp() {
     };
   }
 
+  function insertDropdownFromSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      showToast("Sélectionnez le contenu à inclure dans le volet déroulant.", "warning");
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) {
+      showToast("Sélectionnez le contenu à inclure dans le volet déroulant.", "warning");
+      return;
+    }
+
+    if (!ui.noteEditor.contains(range.commonAncestorContainer)) {
+      showToast("Les volets déroulants ne peuvent être créés que dans l'éditeur.", "warning");
+      return;
+    }
+
+    const fragment = range.extractContents();
+    const details = document.createElement("details");
+    details.className = "editor-dropdown";
+    details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.className = "editor-dropdown__summary";
+    summary.textContent = "Titre du volet";
+
+    const content = document.createElement("div");
+    content.className = "editor-dropdown__content";
+    if (fragment.childNodes.length > 0) {
+      content.appendChild(fragment);
+    } else {
+      const placeholder = document.createElement("p");
+      placeholder.textContent = "Contenu du volet…";
+      content.appendChild(placeholder);
+    }
+
+    details.appendChild(summary);
+    details.appendChild(content);
+
+    range.insertNode(details);
+
+    selection.removeAllRanges();
+    const summaryRange = document.createRange();
+    summaryRange.selectNodeContents(summary);
+    selection.addRange(summaryRange);
+    ui.noteEditor.focus();
+
+    requestAnimationFrame(() => {
+      try {
+        summary.focus({ preventScroll: true });
+      } catch (error) {
+        summary.focus();
+      }
+    });
+
+    handleEditorInput();
+  }
+
   function createClozeFromSelection(priority = CLOZE_DEFAULT_PRIORITY) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -5423,6 +5482,11 @@ function bootstrapApp() {
         if (insideDropdownMenu) {
           setClozeDropdown(false, { focusTarget: "toggle" });
         }
+      } else if (action === "insertDropdown") {
+        handledBySelectionHelper = true;
+        runWithPreservedSelection(() => {
+          insertDropdownFromSelection();
+        });
       } else if (action === "startIteration") {
         startNewIteration();
       }
