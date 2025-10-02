@@ -1826,6 +1826,45 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   content: none;
 }
 
+.editor .editor-dropdown {
+  margin: 1rem 0;
+  border: 1px solid #d1d5db;
+  border-radius: 0.75rem;
+  background-color: #f9fafb;
+  overflow: hidden;
+}
+
+.editor .editor-dropdown[open] {
+  background-color: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.editor .editor-dropdown__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.editor .editor-dropdown__summary:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.editor .editor-dropdown__summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor .editor-dropdown__content {
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid #e5e7eb;
+  background-color: #ffffff;
+}
+
 .cloze-feedback {
   position: absolute;
   top: 0;
