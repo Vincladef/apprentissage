@@ -3633,8 +3633,18 @@ function bootstrapApp() {
       console.error("Impossible de lire text/plain depuis le presse-papiers", clipboardError);
     }
 
-    const hasPlainText =
-      typeof textClipboardData === "string" && textClipboardData.trim() !== "";
+    const placeholderAttribute = "data-clipboard-image-slot";
+    const placeholderPrefix = `clipboard-${Date.now()}-${Math.floor(
+      Math.random() * 1_000_000
+    )}-`;
+    const hasHtmlImage =
+      typeof htmlClipboardData === "string" && /<img\b[^>]*>/i.test(htmlClipboardData);
+
+    const normalizedPlainText =
+      typeof textClipboardData === "string" ? textClipboardData.trim() : "";
+    const hasPlainText = normalizedPlainText !== "";
+
+    let sanitizedHtmlWithoutImages = "";
     const hasHtmlText = (() => {
       if (typeof htmlClipboardData !== "string" || htmlClipboardData.trim() === "") {
         return false;
@@ -3647,18 +3657,55 @@ function bootstrapApp() {
           .replace(/<[^>]+>/g, "")
           .replace(/&nbsp;/gi, " ")
           .trim();
+        if (hasHtmlImage) {
+          sanitizedHtmlWithoutImages = htmlClipboardData
+            .replace(/<img[^>]*>/gi, "")
+            .trim();
+        }
         return textOnly !== "";
       }
       const tempContainer = document.createElement("div");
       tempContainer.innerHTML = htmlClipboardData;
       const textContent = (tempContainer.textContent || "").trim();
+      if (hasHtmlImage) {
+        const cloneWithoutImages = tempContainer.cloneNode(true);
+        const removableElements = cloneWithoutImages.querySelectorAll(
+          "style,meta,link,script,title"
+        );
+        removableElements.forEach((element) => element.remove());
+        const imageElements = cloneWithoutImages.querySelectorAll("img");
+        imageElements.forEach((imgElement, index) => {
+          const placeholder = document.createElement("span");
+          placeholder.setAttribute(
+            placeholderAttribute,
+            `${placeholderPrefix}${index}`
+          );
+          imgElement.replaceWith(placeholder);
+        });
+        sanitizedHtmlWithoutImages = cloneWithoutImages.innerHTML.trim();
+      }
       tempContainer.remove();
       return textContent !== "";
     })();
 
-    const hasTextContent = hasPlainText || hasHtmlText;
+    const placeholderPlainTextPatterns = [
+      /^image$/i,
+      /^image coll[eé]e?$/i,
+      /^image copi[eé]e?$/i,
+      /^pasted image$/i,
+      /^image pasted$/i,
+      /^image from clipboard$/i,
+      /^image du presse[- ]papiers$/i,
+    ];
+    const isPlaceholderPlainText =
+      hasHtmlImage &&
+      hasPlainText &&
+      placeholderPlainTextPatterns.some((pattern) => pattern.test(normalizedPlainText));
+    const hasUsefulPlainText = hasPlainText && !isPlaceholderPlainText;
+    const hasTextContent = hasUsefulPlainText || hasHtmlText;
+    const shouldHandleAsTextOnly = hasTextContent && !hasHtmlImage;
 
-    if (hasTextContent) {
+    if (shouldHandleAsTextOnly) {
       const runEnhancements = () => {
         enhanceEditorImages();
         handleEditorInput({ bypassReadOnly: false });
@@ -3673,6 +3720,105 @@ function bootstrapApp() {
 
     event.preventDefault();
     rememberEditorSelection(event);
+
+    const insertHtmlFragment = (htmlString) => {
+      if (!htmlString || typeof htmlString !== "string") {
+        return null;
+      }
+      if (typeof document === "undefined") {
+        return null;
+      }
+      return runWithPreservedSelection(() => {
+        const selection = window.getSelection();
+        let range =
+          selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        if (!range) {
+          range = document.createRange();
+          range.selectNodeContents(ui.noteEditor);
+          range.collapse(false);
+        }
+        const tempWrapper = document.createElement("div");
+        tempWrapper.innerHTML = htmlString;
+        const fragment = document.createDocumentFragment();
+        let lastNode = null;
+        while (tempWrapper.firstChild) {
+          lastNode = fragment.appendChild(tempWrapper.firstChild);
+        }
+        range.deleteContents();
+        range.insertNode(fragment);
+        if (lastNode) {
+          range.setStartAfter(lastNode);
+          range.collapse(true);
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+        tempWrapper.remove();
+        return lastNode;
+      });
+    };
+
+    const insertPlainText = (text) => {
+      if (typeof text !== "string" || text === "") {
+        return null;
+      }
+      if (typeof document === "undefined") {
+        return null;
+      }
+      return runWithPreservedSelection(() => {
+        const selection = window.getSelection();
+        let range =
+          selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        if (!range) {
+          range = document.createRange();
+          range.selectNodeContents(ui.noteEditor);
+          range.collapse(false);
+        }
+        range.deleteContents();
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.collapse(true);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        return textNode;
+      });
+    };
+
+    const hasInsertedHtml = sanitizedHtmlWithoutImages !== "";
+    if (hasInsertedHtml) {
+      insertHtmlFragment(sanitizedHtmlWithoutImages);
+      if (hasUsefulPlainText && !hasHtmlText) {
+        insertPlainText(textClipboardData);
+      }
+    } else if (hasUsefulPlainText) {
+      insertPlainText(textClipboardData);
+    }
+
+    let placeholderEntries = [];
+    if (
+      hasHtmlImage &&
+      hasInsertedHtml &&
+      typeof document !== "undefined" &&
+      ui.noteEditor
+    ) {
+      const selector = `[${placeholderAttribute}^="${placeholderPrefix}"]`;
+      placeholderEntries = Array.from(ui.noteEditor.querySelectorAll(selector)).map(
+        (element, index) => {
+          const attributeValue = element.getAttribute(placeholderAttribute) || "";
+          const numericPart = attributeValue.slice(placeholderPrefix.length);
+          const parsedIndex = Number.parseInt(numericPart, 10);
+          return {
+            element,
+            index: Number.isNaN(parsedIndex) ? index : parsedIndex,
+          };
+        }
+      );
+      placeholderEntries.sort((a, b) => a.index - b.index);
+    }
 
     const readFileAsDataURL = (file) =>
       new Promise((resolve, reject) => {
@@ -3695,6 +3841,8 @@ function bootstrapApp() {
       });
 
     let insertedAtLeastOnce = false;
+    let lastInsertedNode = null;
+    let placeholderCursor = 0;
 
     for (const file of imageFiles) {
       try {
@@ -3708,14 +3856,7 @@ function bootstrapApp() {
           typeof dataUrl === "string" &&
           dataUrl.startsWith("blob:");
 
-        runWithPreservedSelection(() => {
-          const selection = window.getSelection();
-          let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-          if (!range) {
-            range = document.createRange();
-            range.selectNodeContents(ui.noteEditor);
-            range.collapse(false);
-          }
+        const createImageNode = () => {
           const image = document.createElement("img");
           image.src = dataUrl;
           if (shouldRevokeObjectUrl) {
@@ -3727,23 +3868,72 @@ function bootstrapApp() {
             image.addEventListener("load", release, { once: true });
             image.addEventListener("error", release, { once: true });
           }
-          range.deleteContents();
-          range.insertNode(image);
-          range.setStartAfter(image);
-          range.collapse(true);
-          if (selection) {
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
           return image;
-        });
+        };
+
+        let imageInserted = false;
+        if (placeholderCursor < placeholderEntries.length) {
+          const { element: placeholderElement } = placeholderEntries[placeholderCursor];
+          placeholderCursor += 1;
+          if (
+            placeholderElement &&
+            placeholderElement.parentNode &&
+            typeof document !== "undefined"
+          ) {
+            const image = createImageNode();
+            placeholderElement.replaceWith(image);
+            lastInsertedNode = image;
+            imageInserted = true;
+          }
+        }
+
+        if (!imageInserted) {
+          runWithPreservedSelection(() => {
+            const selection = window.getSelection();
+            let range =
+              selection && selection.rangeCount > 0
+                ? selection.getRangeAt(0)
+                : null;
+            if (!range) {
+              range = document.createRange();
+              range.selectNodeContents(ui.noteEditor);
+              range.collapse(false);
+            }
+            const image = createImageNode();
+            range.deleteContents();
+            range.insertNode(image);
+            range.setStartAfter(image);
+            range.collapse(true);
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+            lastInsertedNode = image;
+            return image;
+          });
+        }
+
         insertedAtLeastOnce = true;
       } catch (error) {
         console.error("Impossible de traiter l'image collée", error);
       }
     }
 
+    if (placeholderCursor < placeholderEntries.length) {
+      for (let i = placeholderCursor; i < placeholderEntries.length; i += 1) {
+        const leftover = placeholderEntries[i] && placeholderEntries[i].element;
+        if (leftover && leftover.parentNode) {
+          leftover.remove();
+        }
+      }
+    }
+
     if (insertedAtLeastOnce) {
+      if (lastInsertedNode && lastInsertedNode.isConnected) {
+        focusEditorPreservingSelection({
+          selectionOverride: { node: lastInsertedNode, position: "after" },
+        });
+      }
       enhanceEditorImages();
       handleEditorInput({ bypassReadOnly: false });
     }
