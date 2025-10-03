@@ -3610,10 +3610,6 @@ function bootstrapApp() {
       return true;
     });
 
-    if (!imageFiles.length) {
-      return;
-    }
-
     let htmlClipboardData = "";
     let textClipboardData = "";
     try {
@@ -3640,11 +3636,16 @@ function bootstrapApp() {
     const hasHtmlImage =
       typeof htmlClipboardData === "string" && /<img\b[^>]*>/i.test(htmlClipboardData);
 
+    if (!imageFiles.length && !hasHtmlImage) {
+      return;
+    }
+
     const normalizedPlainText =
       typeof textClipboardData === "string" ? textClipboardData.trim() : "";
     const hasPlainText = normalizedPlainText !== "";
 
     let sanitizedHtmlWithoutImages = "";
+    const originalHtmlImageEntries = [];
     const hasHtmlText = (() => {
       if (typeof htmlClipboardData !== "string" || htmlClipboardData.trim() === "") {
         return false;
@@ -3680,6 +3681,15 @@ function bootstrapApp() {
             placeholderAttribute,
             `${placeholderPrefix}${index}`
           );
+          let originalSrc = "";
+          if (imgElement) {
+            if (typeof imgElement.getAttribute === "function") {
+              originalSrc = imgElement.getAttribute("src") || "";
+            } else if (typeof imgElement.src === "string") {
+              originalSrc = imgElement.src;
+            }
+          }
+          originalHtmlImageEntries.push({ index, src: originalSrc });
           imgElement.replaceWith(placeholder);
         });
         sanitizedHtmlWithoutImages = cloneWithoutImages.innerHTML.trim();
@@ -3806,14 +3816,22 @@ function bootstrapApp() {
       ui.noteEditor
     ) {
       const selector = `[${placeholderAttribute}^="${placeholderPrefix}"]`;
+      const originalSrcByIndex = new Map();
+      originalHtmlImageEntries.forEach(({ index, src }) => {
+        if (typeof index === "number") {
+          originalSrcByIndex.set(index, typeof src === "string" ? src : "");
+        }
+      });
       placeholderEntries = Array.from(ui.noteEditor.querySelectorAll(selector)).map(
         (element, index) => {
           const attributeValue = element.getAttribute(placeholderAttribute) || "";
           const numericPart = attributeValue.slice(placeholderPrefix.length);
           const parsedIndex = Number.parseInt(numericPart, 10);
+          const resolvedIndex = Number.isNaN(parsedIndex) ? index : parsedIndex;
           return {
             element,
-            index: Number.isNaN(parsedIndex) ? index : parsedIndex,
+            index: resolvedIndex,
+            src: originalSrcByIndex.get(resolvedIndex) || "",
           };
         }
       );
@@ -3840,91 +3858,154 @@ function bootstrapApp() {
         reader.readAsDataURL(file);
       });
 
+    const fetchImageAsDataURL = async (src) => {
+      if (typeof src !== "string" || src.trim() === "") {
+        return null;
+      }
+      const trimmedSrc = src.trim();
+      if (trimmedSrc.startsWith("data:")) {
+        return trimmedSrc;
+      }
+      if (typeof fetch !== "function") {
+        console.error(
+          "L'API fetch n'est pas disponible pour récupérer l'image du presse-papiers",
+          trimmedSrc
+        );
+        return null;
+      }
+      try {
+        const response = await fetch(trimmedSrc);
+        if (!response || !response.ok) {
+          throw new Error(
+            response ? `Statut HTTP ${response.status}` : "Réponse réseau invalide"
+          );
+        }
+        const blob = await response.blob();
+        return await readFileAsDataURL(blob);
+      } catch (error) {
+        console.error(
+          `Impossible de récupérer l'image distante depuis le presse-papiers (${trimmedSrc})`,
+          error
+        );
+        return null;
+      }
+    };
+
     let insertedAtLeastOnce = false;
     let lastInsertedNode = null;
-    let placeholderCursor = 0;
-
-    for (const file of imageFiles) {
-      try {
-        const dataUrl = await readFileAsDataURL(file);
-        if (typeof dataUrl !== "string") {
-          continue;
-        }
-        const shouldRevokeObjectUrl =
-          typeof URL !== "undefined" &&
-          typeof URL.revokeObjectURL === "function" &&
-          typeof dataUrl === "string" &&
-          dataUrl.startsWith("blob:");
-
-        const createImageNode = () => {
-          const image = document.createElement("img");
-          image.src = dataUrl;
-          if (shouldRevokeObjectUrl) {
-            const release = () => {
-              try {
-                URL.revokeObjectURL(dataUrl);
-              } catch (revokeError) {}
-            };
-            image.addEventListener("load", release, { once: true });
-            image.addEventListener("error", release, { once: true });
-          }
-          return image;
+    const createImageNode = (dataUrl) => {
+      if (typeof document === "undefined") {
+        return null;
+      }
+      const image = document.createElement("img");
+      image.src = dataUrl;
+      if (
+        typeof dataUrl === "string" &&
+        dataUrl.startsWith("blob:") &&
+        typeof URL !== "undefined" &&
+        typeof URL.revokeObjectURL === "function"
+      ) {
+        const release = () => {
+          try {
+            URL.revokeObjectURL(dataUrl);
+          } catch (revokeError) {}
         };
+        image.addEventListener("load", release, { once: true });
+        image.addEventListener("error", release, { once: true });
+      }
+      return image;
+    };
 
-        let imageInserted = false;
-        if (placeholderCursor < placeholderEntries.length) {
-          const { element: placeholderElement } = placeholderEntries[placeholderCursor];
-          placeholderCursor += 1;
-          if (
-            placeholderElement &&
-            placeholderElement.parentNode &&
-            typeof document !== "undefined"
-          ) {
-            const image = createImageNode();
-            placeholderElement.replaceWith(image);
-            lastInsertedNode = image;
-            imageInserted = true;
-          }
+    const placeImageNode = (image, placeholderElement = null) => {
+      if (!image) {
+        return null;
+      }
+      if (
+        placeholderElement &&
+        placeholderElement.parentNode &&
+        typeof placeholderElement.replaceWith === "function"
+      ) {
+        placeholderElement.replaceWith(image);
+        return image;
+      }
+      return runWithPreservedSelection(() => {
+        const selection = window.getSelection();
+        let range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        if (!range) {
+          range = document.createRange();
+          range.selectNodeContents(ui.noteEditor);
+          range.collapse(false);
         }
-
-        if (!imageInserted) {
-          runWithPreservedSelection(() => {
-            const selection = window.getSelection();
-            let range =
-              selection && selection.rangeCount > 0
-                ? selection.getRangeAt(0)
-                : null;
-            if (!range) {
-              range = document.createRange();
-              range.selectNodeContents(ui.noteEditor);
-              range.collapse(false);
-            }
-            const image = createImageNode();
-            range.deleteContents();
-            range.insertNode(image);
-            range.setStartAfter(image);
-            range.collapse(true);
-            if (selection) {
-              selection.removeAllRanges();
-              selection.addRange(range);
-            }
-            lastInsertedNode = image;
-            return image;
-          });
+        range.deleteContents();
+        range.insertNode(image);
+        range.setStartAfter(image);
+        range.collapse(true);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
         }
+        return image;
+      });
+    };
 
+    let fileCursor = 0;
+
+    for (const entry of placeholderEntries) {
+      const { element: placeholderElement, src } = entry;
+      let dataUrl = null;
+      let shouldUseFile = fileCursor < imageFiles.length;
+      if (shouldUseFile) {
+        try {
+          dataUrl = await readFileAsDataURL(imageFiles[fileCursor]);
+          fileCursor += 1;
+        } catch (error) {
+          console.error("Impossible de traiter l'image collée depuis le presse-papiers", error);
+          fileCursor += 1;
+          dataUrl = null;
+        }
+      }
+      if (!dataUrl && typeof src === "string" && src !== "") {
+        dataUrl = await fetchImageAsDataURL(src);
+      }
+      if (typeof dataUrl !== "string" || dataUrl === "") {
+        if (placeholderElement && placeholderElement.parentNode) {
+          placeholderElement.remove();
+        }
+        if (typeof src === "string" && src !== "") {
+          console.error(
+            "Impossible de récupérer l'image à partir des données HTML du presse-papiers",
+            src
+          );
+        } else {
+          console.error(
+            "Impossible de récupérer l'image du presse-papiers pour l'un des éléments collés"
+          );
+        }
+        continue;
+      }
+      const image = createImageNode(dataUrl);
+      const insertedImage = placeImageNode(image, placeholderElement);
+      if (insertedImage) {
         insertedAtLeastOnce = true;
-      } catch (error) {
-        console.error("Impossible de traiter l'image collée", error);
+        lastInsertedNode = insertedImage;
       }
     }
 
-    if (placeholderCursor < placeholderEntries.length) {
-      for (let i = placeholderCursor; i < placeholderEntries.length; i += 1) {
-        const leftover = placeholderEntries[i] && placeholderEntries[i].element;
-        if (leftover && leftover.parentNode) {
-          leftover.remove();
+    for (; fileCursor < imageFiles.length; fileCursor += 1) {
+      const file = imageFiles[fileCursor];
+      try {
+        const dataUrl = await readFileAsDataURL(file);
+        if (typeof dataUrl !== "string" || dataUrl === "") {
+          continue;
         }
+        const image = createImageNode(dataUrl);
+        const insertedImage = placeImageNode(image, null);
+        if (insertedImage) {
+          insertedAtLeastOnce = true;
+          lastInsertedNode = insertedImage;
+        }
+      } catch (error) {
+        console.error("Impossible de traiter l'image collée", error);
       }
     }
 
