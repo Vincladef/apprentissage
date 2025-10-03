@@ -361,6 +361,11 @@ function bootstrapApp() {
     if (!(state.visibleClozePriorities instanceof Set)) {
       state.visibleClozePriorities = new Set();
     }
+    if (state.visibleClozePriorities.size === 0) {
+      CLOZE_PRIORITY_VALUES.forEach((value) => {
+        state.visibleClozePriorities.add(value);
+      });
+    }
     return state.visibleClozePriorities;
   }
 
@@ -4885,6 +4890,9 @@ function bootstrapApp() {
     setClozeRevisionDelay(wrapper, 0);
     wrapper.dataset.priority = normalizeClozePriorityValue(priority);
     wrapper.classList.add("cloze-masked");
+    wrapper.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
+    wrapper.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+    getManualRevealSet().add(wrapper);
 
     const fragment = range.extractContents();
     wrapper.appendChild(fragment);
