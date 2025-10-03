@@ -1726,9 +1726,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   font-weight: 600;
   border: 2px solid #000000;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+  display: inline;
+  white-space: normal;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
@@ -1785,6 +1784,9 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .editor .cloze.cloze-masked {
   color: transparent;
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .editor .cloze.cloze-masked.cloze-priority-high {
