@@ -198,6 +198,43 @@ function bootstrapApp() {
     MEDIUM: "medium",
     LOW: "low"
   };
+  const BLOCK_LEVEL_TAGS = new Set([
+    "ADDRESS",
+    "ARTICLE",
+    "ASIDE",
+    "BLOCKQUOTE",
+    "DETAILS",
+    "DIV",
+    "DL",
+    "DT",
+    "DD",
+    "FIELDSET",
+    "FIGCAPTION",
+    "FIGURE",
+    "FOOTER",
+    "FORM",
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5",
+    "H6",
+    "HEADER",
+    "HR",
+    "LI",
+    "MAIN",
+    "NAV",
+    "OL",
+    "P",
+    "PRE",
+    "SECTION",
+    "SUMMARY",
+    "TABLE",
+    "UL"
+  ]);
+  const BLOCK_LEVEL_SELECTOR = Array.from(BLOCK_LEVEL_TAGS)
+    .map((tag) => tag.toLowerCase())
+    .join(",");
   const CLOZE_PRIORITY_VALUES = Object.values(CLOZE_PRIORITY);
   const CLOZE_DEFAULT_PRIORITY = CLOZE_PRIORITY.MEDIUM;
   const CLOZE_PRIORITY_CLASS_MAP = {
@@ -5137,6 +5174,66 @@ function bootstrapApp() {
     handleEditorInput();
   }
 
+  function isBlockLevelElement(node) {
+    return Boolean(
+      node &&
+        node.nodeType === Node.ELEMENT_NODE &&
+        BLOCK_LEVEL_TAGS.has(node.tagName)
+    );
+  }
+
+  function hasBlockLevelDescendant(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+    if (!BLOCK_LEVEL_SELECTOR) {
+      return false;
+    }
+    return Boolean(node.querySelector(BLOCK_LEVEL_SELECTOR));
+  }
+
+  function shouldTreatNodeAsBlock(node) {
+    return isBlockLevelElement(node) || hasBlockLevelDescendant(node);
+  }
+
+  function fragmentContainsBlockNodes(fragment) {
+    if (!fragment) {
+      return false;
+    }
+    const walker = document.createTreeWalker(
+      fragment,
+      NodeFilter.SHOW_ELEMENT,
+      null,
+      false
+    );
+    while (walker.nextNode()) {
+      if (isBlockLevelElement(walker.currentNode)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function initializeClozeElement(cloze, priority, { block = false } = {}) {
+    if (!cloze) {
+      return cloze;
+    }
+    const normalizedPriority = normalizeClozePriorityValue(priority);
+    cloze.classList.add("cloze");
+    if (block) {
+      cloze.classList.add("cloze--block");
+    }
+    cloze.classList.add("cloze-masked");
+    cloze.dataset.placeholder = generateClozePlaceholder();
+    cloze.dataset.score = "0";
+    setClozeRevisionDelay(cloze, 0);
+    cloze.dataset.priority = normalizedPriority;
+    cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
+    cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+    getManualRevealSet().add(cloze);
+    return cloze;
+  }
+
   function createClozeFromSelection(priority = CLOZE_DEFAULT_PRIORITY) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -5153,28 +5250,75 @@ function bootstrapApp() {
       return;
     }
 
-    const wrapper = document.createElement("span");
-    wrapper.className = "cloze";
-    const placeholder = generateClozePlaceholder();
-    wrapper.dataset.placeholder = placeholder;
-    wrapper.dataset.score = "0";
-    setClozeRevisionDelay(wrapper, 0);
-    wrapper.dataset.priority = normalizeClozePriorityValue(priority);
-    wrapper.classList.add("cloze-masked");
-    wrapper.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
-    wrapper.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
-    getManualRevealSet().add(wrapper);
-
     const fragment = range.extractContents();
-    wrapper.appendChild(fragment);
-    range.insertNode(wrapper);
+    const createdClozes = [];
+    const nodesToInsert = [];
+    if (!fragmentContainsBlockNodes(fragment)) {
+      const inlineCloze = initializeClozeElement(
+        document.createElement("span"),
+        priority
+      );
+      inlineCloze.appendChild(fragment);
+      nodesToInsert.push(inlineCloze);
+      createdClozes.push(inlineCloze);
+    } else {
+      const pendingInlineNodes = [];
+      const flushInlineNodes = () => {
+        if (!pendingInlineNodes.length) {
+          return;
+        }
+        const inlineWrapper = initializeClozeElement(
+          document.createElement("span"),
+          priority
+        );
+        pendingInlineNodes.forEach((node) => inlineWrapper.appendChild(node));
+        nodesToInsert.push(inlineWrapper);
+        createdClozes.push(inlineWrapper);
+        pendingInlineNodes.length = 0;
+      };
+
+      Array.from(fragment.childNodes).forEach((node) => {
+        if (shouldTreatNodeAsBlock(node)) {
+          flushInlineNodes();
+          const blockCloze = initializeClozeElement(node, priority, {
+            block: true
+          });
+          nodesToInsert.push(blockCloze);
+          createdClozes.push(blockCloze);
+        } else {
+          pendingInlineNodes.push(node);
+        }
+      });
+      flushInlineNodes();
+
+      if (!nodesToInsert.length) {
+        const fallbackCloze = initializeClozeElement(
+          document.createElement("span"),
+          priority
+        );
+        fallbackCloze.appendChild(fragment);
+        nodesToInsert.push(fallbackCloze);
+        createdClozes.push(fallbackCloze);
+      }
+    }
+
+    const insertionFragment = document.createDocumentFragment();
+    nodesToInsert.forEach((node) => insertionFragment.appendChild(node));
+    range.insertNode(insertionFragment);
+
     selection.removeAllRanges();
+    const lastInserted = nodesToInsert[nodesToInsert.length - 1];
     const afterRange = document.createRange();
-    afterRange.setStartAfter(wrapper);
-    afterRange.collapse(true);
+    if (lastInserted && lastInserted.parentNode) {
+      afterRange.setStartAfter(lastInserted);
+      afterRange.collapse(true);
+    } else {
+      afterRange.selectNodeContents(ui.noteEditor);
+      afterRange.collapse(false);
+    }
     selection.addRange(afterRange);
     ui.noteEditor.focus();
-    refreshClozeElement(wrapper);
+    createdClozes.forEach((cloze) => refreshClozeElement(cloze));
     handleEditorInput();
   }
 

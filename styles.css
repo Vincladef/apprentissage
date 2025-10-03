@@ -1731,6 +1731,59 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
+
+.editor .cloze--block {
+  box-sizing: border-box;
+  border-radius: 1.25rem;
+  width: 100%;
+}
+
+.editor .cloze--block:not(ul):not(ol):not(li):not(table) {
+  display: block;
+  padding: 0.35rem 0.85rem;
+}
+
+.editor .cloze--block.cloze-masked:not(ul):not(ol):not(li):not(table) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.editor .cloze--block.cloze-masked::after {
+  margin-left: 0;
+}
+
+.editor ul.cloze--block,
+.editor ol.cloze--block {
+  padding: 0.45rem 0.85rem 0.45rem 2rem;
+  border-radius: 1.25rem;
+}
+
+.editor ul.cloze--block.cloze-masked,
+.editor ol.cloze--block.cloze-masked {
+  display: block;
+}
+
+.editor li.cloze--block {
+  display: list-item;
+  list-style-position: inside;
+  padding: 0.35rem 0.85rem;
+  border-radius: 1.25rem;
+}
+
+.editor li.cloze--block.cloze-masked {
+  display: list-item;
+}
+
+.editor table.cloze--block {
+  display: table;
+  width: 100%;
+}
+
+.editor table.cloze--block.cloze-masked {
+  display: table;
+}
+
 .editor .cloze.cloze-priority-hidden {
   pointer-events: auto;
   cursor: pointer;
