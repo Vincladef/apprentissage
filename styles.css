@@ -778,8 +778,10 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .note-card-title {
   font-weight: 600;
   font-size: 0.98rem;
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
+  width: 100%;
+  display: block;
 }
 
 .note-row-actions {
