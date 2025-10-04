@@ -782,14 +782,6 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   min-width: 0;
 }
 
-.note-card-meta {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-left: auto;
-  text-align: right;
-  white-space: nowrap;
-}
-
 .note-row-actions {
   display: inline-flex;
   align-items: center;

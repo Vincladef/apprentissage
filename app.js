@@ -3244,11 +3244,6 @@ function bootstrapApp() {
     title.textContent = titleText;
     noteCard.appendChild(title);
 
-    const meta = document.createElement("span");
-    meta.className = "note-card-meta";
-    meta.textContent = formatRelativeDate(note.updatedAt);
-    noteCard.appendChild(meta);
-
     const actions = document.createElement("div");
     actions.className = "note-row-actions";
 
@@ -4553,12 +4548,6 @@ function bootstrapApp() {
       state.lastSavedAt = new Date();
       state.currentNote.updatedAt = state.lastSavedAt;
       updateLocalNoteCache(state.currentNoteId, { updatedAt: state.lastSavedAt });
-      const meta = ui.notesContainer.querySelector(
-        `.note-card[data-note-id="${state.currentNoteId}"] .note-card-meta`
-      );
-      if (meta) {
-        meta.textContent = formatRelativeDate(state.lastSavedAt);
-      }
       updateSaveStatus("saved", state.lastSavedAt);
     } catch (error) {
       state.hasUnsavedChanges = true;
