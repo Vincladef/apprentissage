@@ -5356,20 +5356,35 @@ function bootstrapApp() {
       }
     }
 
-    const insertionFragment = document.createDocumentFragment();
-    const insertedClozeEntries = nodesToInsert.map(({ node, block }) => {
-      const clonedNode = node.cloneNode(true);
-      insertionFragment.appendChild(clonedNode);
-      return { node: clonedNode, block };
-    });
+    const htmlToInsert = nodesToInsert
+      .map(({ node, block }) => {
+        const clonedNode = node.cloneNode(true);
+        clonedNode.setAttribute("data-cloze-pending", "1");
+        if (block) {
+          clonedNode.setAttribute("data-cloze-pending-block", "1");
+        }
+        const container = document.createElement("div");
+        container.appendChild(clonedNode);
+        return container.innerHTML;
+      })
+      .join("");
+
+    if (!htmlToInsert) {
+      return;
+    }
 
     ui.noteEditor.focus();
-    range.deleteContents();
-    range.insertNode(insertionFragment);
+    document.execCommand("insertHTML", false, htmlToInsert);
 
-    insertedClozeEntries.forEach(({ node, block }) => {
+    const insertedClozeEntries = Array.from(
+      ui.noteEditor.querySelectorAll("[data-cloze-pending]")
+    ).map((node) => {
+      const block = node.getAttribute("data-cloze-pending-block") === "1";
+      node.removeAttribute("data-cloze-pending");
+      node.removeAttribute("data-cloze-pending-block");
       const initialized = initializeClozeElement(node, priority, { block });
       refreshClozeElement(initialized);
+      return { node, block };
     });
 
     if (insertedClozeEntries.length) {
