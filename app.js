@@ -387,6 +387,7 @@ function bootstrapApp() {
     notes: [],
     notesById: new Map(),
     collapsedNoteIds: new Set(),
+    hasInitializedCollapseState: false,
     currentNoteId: null,
     currentNote: null,
     pendingSelectionId: null,
@@ -3405,7 +3406,14 @@ function bootstrapApp() {
 
     const { roots, byId } = buildNoteTree(flatNotes);
     const nextCollapsed = new Set();
-    if (state.collapsedNoteIds instanceof Set) {
+    if (!state.hasInitializedCollapseState) {
+      byId.forEach((note) => {
+        if (Array.isArray(note.children) && note.children.length) {
+          nextCollapsed.add(note.id);
+        }
+      });
+      state.hasInitializedCollapseState = true;
+    } else if (state.collapsedNoteIds instanceof Set) {
       state.collapsedNoteIds.forEach((noteId) => {
         const candidate = byId.get(noteId);
         if (candidate && Array.isArray(candidate.children) && candidate.children.length) {
@@ -3442,6 +3450,27 @@ function bootstrapApp() {
     return { ...rest };
   }
 
+  function ensureNotePathVisible(note) {
+    if (!note || !(state.notesById instanceof Map) || !(state.collapsedNoteIds instanceof Set)) {
+      return;
+    }
+
+    let current = note;
+    let hasChanges = false;
+    while (current && current.parentId) {
+      const parentId = current.parentId;
+      if (state.collapsedNoteIds.has(parentId)) {
+        state.collapsedNoteIds.delete(parentId);
+        hasChanges = true;
+      }
+      current = state.notesById.get(parentId);
+    }
+
+    if (hasChanges) {
+      renderNotes();
+    }
+  }
+
   function ensureCurrentSelection() {
     if (state.pendingSelectionId) {
       const pending = getNoteFromState(state.pendingSelectionId);
@@ -3455,6 +3484,7 @@ function bootstrapApp() {
     if (state.currentNoteId) {
       const current = getNoteFromState(state.currentNoteId);
       if (current) {
+        ensureNotePathVisible(current);
         if (state.hasUnsavedChanges && state.currentNote) {
           updateSaveStatus("dirty");
         } else if (state.isEditorFocused) {
@@ -3483,6 +3513,7 @@ function bootstrapApp() {
 
   async function openNote(note, options = {}) {
     if (!note) return;
+    ensureNotePathVisible(note);
     const { skipFlush = false } = options;
     setTextColorPopover(false);
     if (!skipFlush) {
@@ -6591,6 +6622,7 @@ function bootstrapApp() {
     state.notes = [];
     state.notesById = new Map();
     state.collapsedNoteIds = new Set();
+    state.hasInitializedCollapseState = false;
     state.currentNoteId = null;
     state.currentNote = null;
     state.pendingSelectionId = null;
