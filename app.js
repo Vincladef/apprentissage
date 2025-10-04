@@ -6283,8 +6283,10 @@ function bootstrapApp() {
           });
           setClozeDropdown(false, { focusTarget: "toggle" });
         } else {
+          const preferredPriority = getPreferredClozePriority();
+          persistPreferredClozePriority(preferredPriority);
           runWithPreservedSelection(() => {
-            createClozeFromSelection(getPreferredClozePriority());
+            createClozeFromSelection(preferredPriority);
           });
         }
       } else if (action === "insertDropdown") {
