@@ -1,4 +1,4 @@
-# Apprentissage actif !!
+# Apprentissage actif !!!
 
 Application web de prise de notes et de révision active avec texte à trous et répétition espacée. Le frontend est une page statique (compatibles GitHub Pages) et la persistance des données est gérée par Firebase Firestore.
 
