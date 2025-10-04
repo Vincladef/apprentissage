@@ -256,6 +256,9 @@ function bootstrapApp() {
   const CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY = "priorityManualReveal";
   const CLOZE_PRIORITY_FILTER_DATASET_KEY = "priorityHidden";
   const CLOZE_MANUAL_REVEAL_ATTR = "data-manual-reveal";
+  const CLOZE_LINK_GROUP_DATASET_KEY = "linkGroup";
+  const CLOZE_LINK_GROUP_ATTR = "data-link-group";
+  const CLOZE_LINK_GROUP_ID_PREFIX = "cloze-link-group-";
 
   const SHARE_ROLE_VIEWER = "viewer";
   const SHARE_ROLE_EDITOR = "editor";
@@ -440,6 +443,8 @@ function bootstrapApp() {
     isRevisionMode: false,
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
+    lastCreatedCloze: null,
+    nextClozeLinkGroupId: 1,
     share: createShareState(),
     visibleClozePriorities: null,
     isClozeFilterMenuOpen: false,
@@ -479,6 +484,135 @@ function bootstrapApp() {
       state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
     }
     return state[CLOZE_MANUAL_REVEAL_SET_KEY];
+  }
+
+  function getLastCreatedCloze() {
+    const candidate = state.lastCreatedCloze;
+    if (
+      candidate &&
+      candidate instanceof Element &&
+      ui.noteEditor &&
+      typeof ui.noteEditor.contains === "function" &&
+      ui.noteEditor.contains(candidate)
+    ) {
+      return candidate;
+    }
+    state.lastCreatedCloze = null;
+    return null;
+  }
+
+  function setLastCreatedCloze(cloze) {
+    if (
+      cloze instanceof Element &&
+      ui.noteEditor &&
+      typeof ui.noteEditor.contains === "function" &&
+      ui.noteEditor.contains(cloze)
+    ) {
+      state.lastCreatedCloze = cloze;
+    } else {
+      state.lastCreatedCloze = null;
+    }
+  }
+
+  function generateNextClozeLinkGroupId() {
+    const nextId = Number.isFinite(state.nextClozeLinkGroupId)
+      ? state.nextClozeLinkGroupId
+      : 1;
+    state.nextClozeLinkGroupId = nextId + 1;
+    return `${CLOZE_LINK_GROUP_ID_PREFIX}${nextId}`;
+  }
+
+  function recomputeNextClozeLinkGroupId(root = ui.noteEditor) {
+    if (!root || typeof root.querySelectorAll !== "function") {
+      state.nextClozeLinkGroupId = 1;
+      return;
+    }
+    let maxNumericId = 0;
+    root
+      .querySelectorAll(`.cloze[${CLOZE_LINK_GROUP_ATTR}]`)
+      .forEach((element) => {
+        const value = element.getAttribute(CLOZE_LINK_GROUP_ATTR) || "";
+        if (!value.startsWith(CLOZE_LINK_GROUP_ID_PREFIX)) {
+          return;
+        }
+        const suffix = value.slice(CLOZE_LINK_GROUP_ID_PREFIX.length);
+        const numeric = parseInt(suffix, 10);
+        if (Number.isFinite(numeric) && numeric > maxNumericId) {
+          maxNumericId = numeric;
+        }
+      });
+    state.nextClozeLinkGroupId = maxNumericId + 1;
+  }
+
+  function cleanupClozeLinkGroups(root = ui.noteEditor) {
+    if (!root || typeof root.querySelectorAll !== "function") {
+      return;
+    }
+    root
+      .querySelectorAll(`[${CLOZE_LINK_GROUP_ATTR}]:not(.cloze)`)
+      .forEach((element) => {
+        element.removeAttribute(CLOZE_LINK_GROUP_ATTR);
+      });
+    const groups = new Map();
+    root
+      .querySelectorAll(`.cloze[${CLOZE_LINK_GROUP_ATTR}]`)
+      .forEach((cloze) => {
+        const groupId = cloze.getAttribute(CLOZE_LINK_GROUP_ATTR);
+        if (!groupId) {
+          cloze.removeAttribute(CLOZE_LINK_GROUP_ATTR);
+          delete cloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+          return;
+        }
+        const list = groups.get(groupId) || [];
+        list.push(cloze);
+        groups.set(groupId, list);
+      });
+    groups.forEach((members, groupId) => {
+      const validMembers = members.filter((member) => {
+        if (!member || !(member instanceof Element)) {
+          return false;
+        }
+        if (typeof root.contains === "function") {
+          return root.contains(member);
+        }
+        return member.isConnected;
+      });
+      if (validMembers.length <= 1) {
+        validMembers.forEach((member) => {
+          member.removeAttribute(CLOZE_LINK_GROUP_ATTR);
+          delete member.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+        });
+      } else {
+        validMembers.forEach((member) => {
+          member.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
+          member.setAttribute(CLOZE_LINK_GROUP_ATTR, groupId);
+        });
+      }
+    });
+  }
+
+  function getClozeLinkGroupMembers(cloze) {
+    if (!cloze || !(cloze instanceof Element)) {
+      return [];
+    }
+    const groupId = cloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+    if (!groupId || !ui.noteEditor || typeof ui.noteEditor.querySelectorAll !== "function") {
+      return [cloze];
+    }
+    let selectorValue = groupId;
+    if (typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function") {
+      selectorValue = CSS.escape(groupId);
+    } else {
+      selectorValue = groupId.replace(/"/g, '\\"');
+    }
+    const selector = `.cloze[${CLOZE_LINK_GROUP_ATTR}="${selectorValue}"]`;
+    const members = Array.from(ui.noteEditor.querySelectorAll(selector)).filter(
+      (element) => element.dataset[CLOZE_LINK_GROUP_DATASET_KEY] === groupId
+    );
+    if (!members.includes(cloze)) {
+      members.push(cloze);
+    }
+    return members.length ? members : [cloze];
   }
 
   function ensureVisibleClozePriorities() {
@@ -521,6 +655,7 @@ function bootstrapApp() {
     clozeDropdownMain: document.querySelector("#cloze-priority-dropdown .toolbar-dropdown-main"),
     clozeDropdownToggle: document.getElementById("cloze-priority-toggle"),
     clozeDropdownMenu: document.getElementById("cloze-priority-menu"),
+    linkedClozeButton: document.querySelector('button[data-action="createLinkedCloze"]'),
     textColorButton: document.querySelector('button[data-action="applyTextColor"]'),
     textColorPopover: document.getElementById("text-color-popover"),
     textColorOptions: document.getElementById("text-color-options"),
@@ -1764,6 +1899,13 @@ function bootstrapApp() {
     return `Créer un texte à trous (priorité ${suffix})`;
   }
 
+  function formatLinkedClozePriorityTitle(priority) {
+    const normalized = normalizeClozePriorityValue(priority);
+    const suffix =
+      CLOZE_PRIORITY_LABELS[normalized] || CLOZE_PRIORITY_LABELS[CLOZE_DEFAULT_PRIORITY];
+    return `Créer un texte à trous lié (priorité ${suffix})`;
+  }
+
   function updatePreferredClozePriorityUI(priority) {
     const normalized = normalizeClozePriorityValue(priority);
     if (ui.clozeDropdownMain) {
@@ -1773,6 +1915,16 @@ function bootstrapApp() {
       const srLabel = ui.clozeDropdownMain.querySelector(".sr-only");
       if (srLabel) {
         srLabel.textContent = title;
+      }
+    }
+
+    if (ui.linkedClozeButton) {
+      ui.linkedClozeButton.dataset.priority = normalized;
+      const linkedTitle = formatLinkedClozePriorityTitle(normalized);
+      ui.linkedClozeButton.title = linkedTitle;
+      const linkedSrLabel = ui.linkedClozeButton.querySelector(".sr-only");
+      if (linkedSrLabel) {
+        linkedSrLabel.textContent = linkedTitle;
       }
     }
 
@@ -2039,6 +2191,7 @@ function bootstrapApp() {
     container.querySelectorAll(".editor-image").forEach((wrapper) => {
       unwrapEditorImage(wrapper);
     });
+    cleanupClozeLinkGroups(container);
     return container.innerHTML;
   }
 
@@ -3053,6 +3206,8 @@ function bootstrapApp() {
     state.isEditorFocused = false;
     state.savedSelection = null;
     state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
+    state.lastCreatedCloze = null;
+    state.nextClozeLinkGroupId = 1;
     if (ui.blockFormat) {
       ui.blockFormat.value = "p";
     }
@@ -3087,6 +3242,8 @@ function bootstrapApp() {
       state[CLOZE_MANUAL_REVEAL_SET_KEY] = new WeakSet();
       const selection = isFocused ? captureSelection(ui.noteEditor) : null;
       ui.noteEditor.innerHTML = desiredHtml;
+      state.lastCreatedCloze = null;
+      state.nextClozeLinkGroupId = 1;
       if (selection) {
         restoreSelection(ui.noteEditor, selection);
       }
@@ -3666,6 +3823,16 @@ function bootstrapApp() {
   function handleEditorInput(arg = {}) {
     if (!state.currentNote) return;
 
+    if (
+      state.lastCreatedCloze &&
+      ui.noteEditor &&
+      (!state.lastCreatedCloze.isConnected ||
+        (typeof ui.noteEditor.contains === "function" &&
+          !ui.noteEditor.contains(state.lastCreatedCloze)))
+    ) {
+      state.lastCreatedCloze = null;
+    }
+
     let event = null;
     let options = {};
     if (arg instanceof Event) {
@@ -3741,6 +3908,8 @@ function bootstrapApp() {
     }
 
     refreshAllClozes();
+    cleanupClozeLinkGroups(ui.noteEditor);
+    recomputeNextClozeLinkGroupId(ui.noteEditor);
     state.currentNote.contentHtml = ui.noteEditor.innerHTML;
     state.hasUnsavedChanges = true;
     state.pendingRemoteNote = null;
@@ -4894,6 +5063,8 @@ function bootstrapApp() {
     const clozes = ui.noteEditor.querySelectorAll(".cloze");
     clozes.forEach((cloze) => refreshClozeElement(cloze));
     updateClozeVisibilityForFilter();
+    cleanupClozeLinkGroups(ui.noteEditor);
+    recomputeNextClozeLinkGroupId(ui.noteEditor);
   }
 
   function getClozeFilterCheckboxes() {
@@ -5020,52 +5191,75 @@ function bootstrapApp() {
     }
     const clozes = ui.noteEditor.querySelectorAll(".cloze");
     const manualRevealSet = getManualRevealSet();
-    clozes.forEach((cloze) => {
-      const priority = normalizeClozePriorityValue(getClozePriority(cloze));
+
+    const processClozeForFilter = (clozeNode) => {
+      if (!clozeNode) {
+        return;
+      }
+      const priority = normalizeClozePriorityValue(getClozePriority(clozeNode));
       const isVisible = priorities.has(priority);
-      const hasManualRevealAttr = cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1";
+      const hasManualRevealAttr =
+        clozeNode.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1";
       const hasPriorityManualReveal =
-        cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
-      const hasDeferredReveal = cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1";
-      const hasPositiveScore = getClozeScore(cloze) > 0;
+        clozeNode.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
+      const hasDeferredReveal = clozeNode.dataset[CLOZE_DEFER_DATA_KEY] === "1";
+      const hasPositiveScore = getClozeScore(clozeNode) > 0;
       const hasSpacedRepetitionOverride = hasDeferredReveal || hasPositiveScore;
       const hasManualOverride =
         isVisible &&
         (hasManualRevealAttr ||
           hasPriorityManualReveal ||
-          manualRevealSet.has(cloze));
+          manualRevealSet.has(clozeNode));
       const shouldHideForPriority = !isVisible && !hasSpacedRepetitionOverride;
 
       if (!isVisible) {
-        if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
-          delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+        if (clozeNode.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+          delete clozeNode.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
         }
-        manualRevealSet.delete(cloze);
+        manualRevealSet.delete(clozeNode);
       }
 
       if (shouldHideForPriority) {
-        cloze.classList.add("cloze-priority-hidden");
-        cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] = "1";
-        if (cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY]) {
-          delete cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
+        clozeNode.classList.add("cloze-priority-hidden");
+        clozeNode.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] = "1";
+        if (clozeNode.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY]) {
+          delete clozeNode.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY];
         }
-        if (cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
-          delete cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
+        if (clozeNode.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY]) {
+          delete clozeNode.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY];
         }
-        manualRevealSet.delete(cloze);
+        manualRevealSet.delete(clozeNode);
       } else {
-        cloze.classList.remove("cloze-priority-hidden");
-        if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
-          delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+        clozeNode.classList.remove("cloze-priority-hidden");
+        if (clozeNode.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY]) {
+          delete clozeNode.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
         }
         if (isVisible) {
-          cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
-          manualRevealSet.add(cloze);
+          clozeNode.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+          manualRevealSet.add(clozeNode);
         } else if (hasManualOverride) {
-          manualRevealSet.add(cloze);
+          manualRevealSet.add(clozeNode);
         }
       }
-      refreshClozeElement(cloze);
+      refreshClozeElement(clozeNode);
+    };
+
+    const processedGroups = new Set();
+    clozes.forEach((cloze) => {
+      if (!cloze) {
+        return;
+      }
+      const groupId = cloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+      if (groupId) {
+        if (processedGroups.has(groupId)) {
+          return;
+        }
+        processedGroups.add(groupId);
+        const members = getClozeLinkGroupMembers(cloze);
+        members.forEach((member) => processClozeForFilter(member));
+      } else {
+        processClozeForFilter(cloze);
+      }
     });
     if (state.activeCloze && state.activeCloze.classList.contains("cloze-priority-hidden")) {
       hideClozeFeedback();
@@ -5249,6 +5443,9 @@ function bootstrapApp() {
     range.deleteContents();
     range.insertNode(wrapper);
     refreshClozeElement(wrapper);
+    delete wrapper.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+    wrapper.removeAttribute(CLOZE_LINK_GROUP_ATTR);
+    setLastCreatedCloze(wrapper);
 
     const selectionOverride = (() => {
       try {
@@ -5388,7 +5585,17 @@ function bootstrapApp() {
     return cloze;
   }
 
-  function createClozeFromSelection(priority = CLOZE_DEFAULT_PRIORITY) {
+  function createClozeFromSelection(arg = {}) {
+    const options =
+      arg && typeof arg === "object" && !Array.isArray(arg)
+        ? arg
+        : { priority: arg };
+    const resolvedPriority = normalizeClozePriorityValue(
+      options && "priority" in options && options.priority !== undefined
+        ? options.priority
+        : CLOZE_DEFAULT_PRIORITY
+    );
+    const linkToPrevious = Boolean(options && options.linkToPrevious);
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       showToast("Sélectionnez du texte à transformer en trou.", "warning");
@@ -5402,6 +5609,13 @@ function bootstrapApp() {
     if (!ui.noteEditor.contains(range.commonAncestorContainer)) {
       showToast("Les trous ne peuvent être créés que dans l'éditeur.", "warning");
       return;
+    }
+
+    const previousCloze = linkToPrevious ? getLastCreatedCloze() : null;
+    let groupId = null;
+    if (linkToPrevious && previousCloze) {
+      const existingGroupId = previousCloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+      groupId = existingGroupId || generateNextClozeLinkGroupId();
     }
 
     const fragment = range.cloneContents();
@@ -5481,7 +5695,14 @@ function bootstrapApp() {
       const block = node.getAttribute("data-cloze-pending-block") === "1";
       node.removeAttribute("data-cloze-pending");
       node.removeAttribute("data-cloze-pending-block");
-      const initialized = initializeClozeElement(node, priority, { block });
+      const initialized = initializeClozeElement(node, resolvedPriority, {
+        block,
+      });
+      delete initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+      initialized.removeAttribute(CLOZE_LINK_GROUP_ATTR);
+      if (groupId) {
+        initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
+      }
       refreshClozeElement(initialized);
       return { node, block };
     });
@@ -5499,6 +5720,15 @@ function bootstrapApp() {
       selection.removeAllRanges();
       selection.addRange(selectionRange);
       ui.noteEditor.focus();
+      if (groupId && previousCloze) {
+        previousCloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
+      }
+      const lastClozeNode = lastEntry ? lastEntry.node : null;
+      if (lastClozeNode) {
+        setLastCreatedCloze(lastClozeNode);
+      }
+    } else if (previousCloze) {
+      setLastCreatedCloze(previousCloze);
     }
 
     handleEditorInput();
@@ -5929,10 +6159,20 @@ function bootstrapApp() {
   }
 
   function clearActiveCloze() {
-    if (state.activeCloze) {
-      state.activeCloze.classList.remove("cloze-revealed");
-      state.activeCloze = null;
+    if (!state.activeCloze) {
+      return;
     }
+    const members = getClozeLinkGroupMembers(state.activeCloze);
+    if (Array.isArray(members) && members.length) {
+      members.forEach((member) => {
+        if (member && member.classList) {
+          member.classList.remove("cloze-revealed");
+        }
+      });
+    } else if (state.activeCloze.classList) {
+      state.activeCloze.classList.remove("cloze-revealed");
+    }
+    state.activeCloze = null;
   }
 
   function resetClozeFeedbackButtons() {
@@ -6035,7 +6275,16 @@ function bootstrapApp() {
     if (!ui.clozeFeedback || !target) return;
     resetClozeFeedbackButtons();
     state.activeCloze = target;
-    target.classList.add("cloze-revealed");
+    const groupMembers = getClozeLinkGroupMembers(target);
+    if (Array.isArray(groupMembers) && groupMembers.length) {
+      groupMembers.forEach((member) => {
+        if (member && member.classList) {
+          member.classList.add("cloze-revealed");
+        }
+      });
+    } else {
+      target.classList.add("cloze-revealed");
+    }
     ui.clozeFeedback.classList.remove("hidden");
     positionClozeFeedback(target);
     requestAnimationFrame(() => positionClozeFeedback(target));
@@ -6061,33 +6310,48 @@ function bootstrapApp() {
     }
 
     const manualRevealSet = getManualRevealSet();
-    const wasPriorityHidden = cloze.classList.contains("cloze-priority-hidden");
-    const wasMasked = cloze.classList.contains("cloze-masked");
-    if (wasPriorityHidden) {
-      manualRevealSet.add(cloze);
-      cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
-      if (cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] === "1") {
-        delete cloze.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+    const groupMembers = getClozeLinkGroupMembers(cloze);
+    const clickedWasMasked = cloze.classList.contains("cloze-masked");
+
+    groupMembers.forEach((member) => {
+      if (!member) {
+        return;
       }
-      refreshClozeElement(cloze);
-    }
+      const memberWasPriorityHidden = member.classList.contains(
+        "cloze-priority-hidden"
+      );
+      const memberWasMasked = member.classList.contains("cloze-masked");
+      const hadPriorityManualReveal =
+        member.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
+      const hasDeferredReveal =
+        member.dataset[CLOZE_DEFER_DATA_KEY] === "1" ||
+        member.dataset.defer === "1";
+      let shouldRefresh = false;
 
-    const hasPriorityManualReveal =
-      cloze.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] === "1";
-    const hasDeferredReveal =
-      cloze.dataset[CLOZE_DEFER_DATA_KEY] === "1" ||
-      cloze.dataset.defer === "1";
+      if (memberWasPriorityHidden) {
+        manualRevealSet.add(member);
+        member.dataset[CLOZE_PRIORITY_MANUAL_REVEAL_DATASET_KEY] = "1";
+        if (member.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY] === "1") {
+          delete member.dataset[CLOZE_PRIORITY_FILTER_DATASET_KEY];
+        }
+        shouldRefresh = true;
+      }
 
-    if (wasMasked) {
-      manualRevealSet.add(cloze);
-      cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
-      refreshClozeElement(cloze);
-    } else if (hasPriorityManualReveal || hasDeferredReveal) {
-      manualRevealSet.add(cloze);
-    }
+      if (memberWasMasked) {
+        manualRevealSet.add(member);
+        member.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] = "1";
+        shouldRefresh = true;
+      } else if (hadPriorityManualReveal || hasDeferredReveal) {
+        manualRevealSet.add(member);
+      }
+
+      if (shouldRefresh) {
+        refreshClozeElement(member);
+      }
+    });
 
     const isManuallyRevealed = manualRevealSet.has(cloze);
-    if (!wasMasked && !isManuallyRevealed) {
+    if (!clickedWasMasked && !isManuallyRevealed) {
       hideClozeFeedback();
       return;
     }
@@ -6279,16 +6543,26 @@ function bootstrapApp() {
           const selectedPriority = normalizeClozePriorityValue(button.dataset.priority);
           const appliedPriority = setPreferredClozePriority(selectedPriority);
           runWithPreservedSelection(() => {
-            createClozeFromSelection(appliedPriority);
+            createClozeFromSelection({ priority: appliedPriority });
           });
           setClozeDropdown(false, { focusTarget: "toggle" });
         } else {
           const preferredPriority = getPreferredClozePriority();
           persistPreferredClozePriority(preferredPriority);
           runWithPreservedSelection(() => {
-            createClozeFromSelection(preferredPriority);
+            createClozeFromSelection({ priority: preferredPriority });
           });
         }
+      } else if (action === "createLinkedCloze") {
+        handledBySelectionHelper = true;
+        const preferredPriority = getPreferredClozePriority();
+        persistPreferredClozePriority(preferredPriority);
+        runWithPreservedSelection(() => {
+          createClozeFromSelection({
+            priority: preferredPriority,
+            linkToPrevious: true,
+          });
+        });
       } else if (action === "insertDropdown") {
         handledBySelectionHelper = true;
         runWithPreservedSelection(() => {
