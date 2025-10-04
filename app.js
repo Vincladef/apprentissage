@@ -3267,7 +3267,7 @@ function bootstrapApp() {
         }
         updateToggleState(toggleButton, noteCard, childrenContainer);
       });
-      actions.appendChild(toggleButton);
+      actions.prepend(toggleButton);
     }
 
     const addChildBtn = document.createElement("button");
@@ -3316,8 +3316,11 @@ function bootstrapApp() {
         childrenContainer.appendChild(renderNoteNode(child, level + 1));
       });
       node.appendChild(childrenContainer);
-      toggleButton.setAttribute("aria-controls", childrenContainer.id);
-      toggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+      if (toggleButton) {
+        toggleButton.setAttribute("aria-controls", childrenContainer.id);
+        toggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+      }
+      noteCard.setAttribute("aria-controls", childrenContainer.id);
     }
 
     function updateToggleState(toggleEl, noteEl, childrenEl) {
@@ -3330,12 +3333,21 @@ function bootstrapApp() {
           `${collapsed ? "Développer" : "Réduire"} la fiche ${currentTitle}`
         );
         toggleEl.setAttribute("aria-expanded", String(!collapsed));
+        if (childrenEl) {
+          toggleEl.setAttribute("aria-controls", childrenEl.id);
+        } else {
+          toggleEl.removeAttribute("aria-controls");
+        }
       }
       if (noteEl) {
         if (Array.isArray(note.children) && note.children.length > 0) {
           noteEl.setAttribute("aria-expanded", String(!collapsed));
+          if (childrenEl) {
+            noteEl.setAttribute("aria-controls", childrenEl.id);
+          }
         } else {
           noteEl.removeAttribute("aria-expanded");
+          noteEl.removeAttribute("aria-controls");
         }
       }
       if (childrenEl) {
