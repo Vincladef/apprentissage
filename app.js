@@ -5316,41 +5316,45 @@ function bootstrapApp() {
       return;
     }
 
-    const fragment = range.extractContents();
-    const createdClozes = [];
+    const fragment = range.cloneContents();
     const nodesToInsert = [];
+    const createdClozes = [];
+    let clozeTempIdCounter = 0;
+    const generateTempId = () =>
+      `cloze-temp-${Date.now().toString(36)}-${(clozeTempIdCounter++)
+        .toString(36)
+        .padStart(2, "0")}`;
+
+    const registerNodeForInsertion = (node, options = {}) => {
+      const { block = false } = options;
+      const tempId = generateTempId();
+      node.setAttribute("data-cloze-temp-id", tempId);
+      nodesToInsert.push(node);
+      createdClozes.push({ tempId, block });
+    };
+
     if (!fragmentContainsBlockNodes(fragment)) {
-      const inlineCloze = initializeClozeElement(
-        document.createElement("span"),
-        priority
-      );
-      inlineCloze.appendChild(fragment);
-      nodesToInsert.push(inlineCloze);
-      createdClozes.push(inlineCloze);
+      const inlineWrapper = document.createElement("span");
+      while (fragment.firstChild) {
+        inlineWrapper.appendChild(fragment.firstChild);
+      }
+      registerNodeForInsertion(inlineWrapper, { block: false });
     } else {
       const pendingInlineNodes = [];
       const flushInlineNodes = () => {
         if (!pendingInlineNodes.length) {
           return;
         }
-        const inlineWrapper = initializeClozeElement(
-          document.createElement("span"),
-          priority
-        );
+        const inlineWrapper = document.createElement("span");
         pendingInlineNodes.forEach((node) => inlineWrapper.appendChild(node));
-        nodesToInsert.push(inlineWrapper);
-        createdClozes.push(inlineWrapper);
+        registerNodeForInsertion(inlineWrapper, { block: false });
         pendingInlineNodes.length = 0;
       };
 
       Array.from(fragment.childNodes).forEach((node) => {
         if (shouldTreatNodeAsBlock(node)) {
           flushInlineNodes();
-          const blockCloze = initializeClozeElement(node, priority, {
-            block: true
-          });
-          nodesToInsert.push(blockCloze);
-          createdClozes.push(blockCloze);
+          registerNodeForInsertion(node, { block: true });
         } else {
           pendingInlineNodes.push(node);
         }
@@ -5358,25 +5362,48 @@ function bootstrapApp() {
       flushInlineNodes();
 
       if (!nodesToInsert.length) {
-        const fallbackCloze = initializeClozeElement(
-          document.createElement("span"),
-          priority
-        );
-        fallbackCloze.appendChild(fragment);
-        nodesToInsert.push(fallbackCloze);
-        createdClozes.push(fallbackCloze);
+        const fallbackWrapper = document.createElement("span");
+        while (fragment.firstChild) {
+          fallbackWrapper.appendChild(fragment.firstChild);
+        }
+        registerNodeForInsertion(fallbackWrapper, { block: false });
       }
     }
 
-    const insertionFragment = document.createDocumentFragment();
-    nodesToInsert.forEach((node) => insertionFragment.appendChild(node));
-    range.insertNode(insertionFragment);
+    const container = document.createElement("div");
+    nodesToInsert.forEach((node) => container.appendChild(node));
+    const htmlToInsert = container.innerHTML;
+
+    ui.noteEditor.focus();
+    const execCommandSucceeded = document.execCommand(
+      "insertHTML",
+      false,
+      htmlToInsert
+    );
+
+    if (!execCommandSucceeded) {
+      range.deleteContents();
+      const fallbackFragment = range.createContextualFragment(htmlToInsert);
+      range.insertNode(fallbackFragment);
+    }
+
+    const insertedClozeEntries = createdClozes
+      .map((metadata) => {
+        const insertedNode = ui.noteEditor.querySelector(
+          `[data-cloze-temp-id="${metadata.tempId}"]`
+        );
+        if (!insertedNode) {
+          return null;
+        }
+        return { node: insertedNode, metadata };
+      })
+      .filter(Boolean);
 
     selection.removeAllRanges();
-    const lastInserted = nodesToInsert[nodesToInsert.length - 1];
     const afterRange = document.createRange();
-    if (lastInserted && lastInserted.parentNode) {
-      afterRange.setStartAfter(lastInserted);
+    const lastEntry = insertedClozeEntries[insertedClozeEntries.length - 1];
+    if (lastEntry && lastEntry.node.parentNode) {
+      afterRange.setStartAfter(lastEntry.node);
       afterRange.collapse(true);
     } else {
       afterRange.selectNodeContents(ui.noteEditor);
@@ -5384,7 +5411,24 @@ function bootstrapApp() {
     }
     selection.addRange(afterRange);
     ui.noteEditor.focus();
-    createdClozes.forEach((cloze) => refreshClozeElement(cloze));
+
+    const initializedClozes = insertedClozeEntries.map(({ node, metadata }) => {
+      const initialized = initializeClozeElement(node, priority, {
+        block: metadata.block
+      });
+      node.removeAttribute("data-cloze-temp-id");
+      refreshClozeElement(initialized);
+      return initialized;
+    });
+
+    if (!initializedClozes.length) {
+      showToast(
+        "Une erreur est survenue lors de la création du trou.",
+        "error"
+      );
+      return;
+    }
+
     handleEditorInput();
   }
 
