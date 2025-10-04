@@ -260,6 +260,55 @@ function bootstrapApp() {
     [SHARE_ROLE_EDITOR]: "Éditeur",
   };
   const SHARE_SEARCH_DEBOUNCE_MS = 320;
+  const CURRENT_NOTE_STORAGE_KEY = "apprentissage:currentNoteId";
+
+  function getSafeLocalStorage() {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    try {
+      return window.localStorage || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function readPersistedCurrentNoteId() {
+    const storage = getSafeLocalStorage();
+    if (!storage) {
+      return null;
+    }
+    try {
+      const value = storage.getItem(CURRENT_NOTE_STORAGE_KEY);
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : null;
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
+  }
+
+  function persistCurrentNoteId(noteId) {
+    const storage = getSafeLocalStorage();
+    if (!storage) {
+      return;
+    }
+    try {
+      if (typeof noteId === "string" && noteId.trim()) {
+        storage.setItem(CURRENT_NOTE_STORAGE_KEY, noteId.trim());
+      } else {
+        storage.removeItem(CURRENT_NOTE_STORAGE_KEY);
+      }
+    } catch (error) {
+      // Ignorer les erreurs de stockage local (mode navigation privée, quota, ...)
+    }
+  }
+
+  function clearPersistedCurrentNoteId() {
+    persistCurrentNoteId(null);
+  }
 
   function normalizeShareRole(role) {
     if (typeof role === "string") {
@@ -341,6 +390,7 @@ function bootstrapApp() {
     currentNoteId: null,
     currentNote: null,
     pendingSelectionId: null,
+    hasRestoredCurrentNoteFromStorage: false,
     pendingSave: null,
     hasUnsavedChanges: false,
     lastSavedAt: null,
@@ -3367,6 +3417,21 @@ function bootstrapApp() {
     state.notes = roots;
     state.notesById = byId;
 
+    const persistedNoteId = readPersistedCurrentNoteId();
+    if (persistedNoteId && !byId.has(persistedNoteId)) {
+      clearPersistedCurrentNoteId();
+    }
+    if (!state.hasRestoredCurrentNoteFromStorage) {
+      if (persistedNoteId && byId.has(persistedNoteId)) {
+        if (!state.pendingSelectionId && state.currentNoteId !== persistedNoteId) {
+          state.pendingSelectionId = persistedNoteId;
+        }
+        state.hasRestoredCurrentNoteFromStorage = true;
+      } else if (!persistedNoteId || !byId.has(persistedNoteId)) {
+        state.hasRestoredCurrentNoteFromStorage = true;
+      }
+    }
+
     renderNotes();
     ensureCurrentSelection();
   }
@@ -3428,6 +3493,7 @@ function bootstrapApp() {
     }
     state.currentNoteId = note.id;
     state.currentNote = sanitizeNoteForEditing(note);
+    persistCurrentNoteId(state.currentNoteId);
     state.hasUnsavedChanges = false;
     applyCurrentNoteToEditor({ force: true });
     updateActiveNoteHighlight();
@@ -6229,6 +6295,10 @@ function bootstrapApp() {
         await deleteDoc(doc(db, "users", state.userId, "notes", id));
         state.collapsedNoteIds.delete(id);
       }
+      const persistedNoteId = readPersistedCurrentNoteId();
+      if (persistedNoteId && idsToDelete.includes(persistedNoteId)) {
+        clearPersistedCurrentNoteId();
+      }
       if (state.currentNoteId && idsToDelete.includes(state.currentNoteId)) {
         state.currentNoteId = null;
         state.currentNote = null;
@@ -6480,6 +6550,7 @@ function bootstrapApp() {
     state.currentNoteId = null;
     state.currentNote = null;
     state.pendingSelectionId = null;
+    state.hasRestoredCurrentNoteFromStorage = false;
     state.hasUnsavedChanges = false;
     state.lastSavedAt = null;
     state.pendingRemoteNote = null;
