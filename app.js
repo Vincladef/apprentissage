@@ -3184,39 +3184,10 @@ function bootstrapApp() {
 
     const row = document.createElement("div");
     row.className = "note-row";
-    row.classList.add(hasChildren ? "note-row--has-toggle" : "note-row--no-toggle");
     row.style.setProperty("--note-depth", String(Math.max(level - 1, 0)));
 
     let toggleButton = null;
     let childrenContainer = null;
-
-    if (hasChildren) {
-      toggleButton = document.createElement("button");
-      toggleButton.type = "button";
-      toggleButton.className = "note-toggle";
-      toggleButton.dataset.noteId = note.id;
-      toggleButton.setAttribute(
-        "aria-label",
-        `${isCollapsed ? "Développer" : "Réduire"} la fiche ${resolveTitle()}`
-      );
-      toggleButton.textContent = isCollapsed ? "▸" : "▾";
-      toggleButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const shouldCollapse = !state.collapsedNoteIds.has(note.id);
-        if (shouldCollapse) {
-          state.collapsedNoteIds.add(note.id);
-        } else {
-          state.collapsedNoteIds.delete(note.id);
-        }
-        updateToggleState(toggleButton, noteCard, childrenContainer);
-      });
-      row.appendChild(toggleButton);
-    } else {
-      const spacer = document.createElement("span");
-      spacer.className = "note-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
-    }
 
     const noteCard = document.createElement("button");
     noteCard.type = "button";
@@ -3280,6 +3251,29 @@ function bootstrapApp() {
 
     const actions = document.createElement("div");
     actions.className = "note-row-actions";
+
+    if (hasChildren) {
+      toggleButton = document.createElement("button");
+      toggleButton.type = "button";
+      toggleButton.className = "note-toggle";
+      toggleButton.dataset.noteId = note.id;
+      toggleButton.setAttribute(
+        "aria-label",
+        `${isCollapsed ? "Développer" : "Réduire"} la fiche ${resolveTitle()}`
+      );
+      toggleButton.textContent = isCollapsed ? "▸" : "▾";
+      toggleButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const shouldCollapse = !state.collapsedNoteIds.has(note.id);
+        if (shouldCollapse) {
+          state.collapsedNoteIds.add(note.id);
+        } else {
+          state.collapsedNoteIds.delete(note.id);
+        }
+        updateToggleState(toggleButton, noteCard, childrenContainer);
+      });
+      actions.appendChild(toggleButton);
+    }
 
     const addChildBtn = document.createElement("button");
     addChildBtn.type = "button";
