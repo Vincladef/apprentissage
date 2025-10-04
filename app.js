@@ -198,6 +198,11 @@ function bootstrapApp() {
     MEDIUM: "medium",
     LOW: "low"
   };
+  const CLOZE_PRIORITY_LABELS = {
+    [CLOZE_PRIORITY.HIGH]: "haute",
+    [CLOZE_PRIORITY.MEDIUM]: "moyenne",
+    [CLOZE_PRIORITY.LOW]: "basse",
+  };
   const BLOCK_LEVEL_TAGS = new Set([
     "ADDRESS",
     "ARTICLE",
@@ -261,6 +266,7 @@ function bootstrapApp() {
   };
   const SHARE_SEARCH_DEBOUNCE_MS = 320;
   const CURRENT_NOTE_STORAGE_KEY = "apprentissage:currentNoteId";
+  const PREFERRED_CLOZE_PRIORITY_STORAGE_KEY = "apprentissage:preferredClozePriority";
 
   function getSafeLocalStorage() {
     if (typeof window === "undefined") {
@@ -308,6 +314,39 @@ function bootstrapApp() {
 
   function clearPersistedCurrentNoteId() {
     persistCurrentNoteId(null);
+  }
+
+  function readPersistedPreferredClozePriority() {
+    const storage = getSafeLocalStorage();
+    if (!storage) {
+      return null;
+    }
+    try {
+      const value = storage.getItem(PREFERRED_CLOZE_PRIORITY_STORAGE_KEY);
+      if (typeof value === "string" && value.trim() !== "") {
+        return normalizeClozePriorityValue(value);
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
+  }
+
+  function persistPreferredClozePriority(priority) {
+    const storage = getSafeLocalStorage();
+    if (!storage) {
+      return;
+    }
+    try {
+      const normalized = normalizeClozePriorityValue(priority);
+      if (typeof normalized === "string" && normalized) {
+        storage.setItem(PREFERRED_CLOZE_PRIORITY_STORAGE_KEY, normalized);
+      } else {
+        storage.removeItem(PREFERRED_CLOZE_PRIORITY_STORAGE_KEY);
+      }
+    } catch (error) {
+      // Ignorer les erreurs de stockage local
+    }
   }
 
   function normalizeShareRole(role) {
@@ -395,6 +434,7 @@ function bootstrapApp() {
     textColor: DEFAULT_TEXT_COLOR,
     isTextColorPopoverOpen: false,
     activeCloze: null,
+    preferredClozePriority: CLOZE_DEFAULT_PRIORITY,
     pendingRemoteNote: null,
     isEditorFocused: false,
     isRevisionMode: false,
@@ -478,6 +518,7 @@ function bootstrapApp() {
     toast: document.getElementById("toast"),
     toolbar: document.querySelector(".editor-toolbar"),
     clozeDropdown: document.getElementById("cloze-priority-dropdown"),
+    clozeDropdownMain: document.querySelector("#cloze-priority-dropdown .toolbar-dropdown-main"),
     clozeDropdownToggle: document.getElementById("cloze-priority-toggle"),
     clozeDropdownMenu: document.getElementById("cloze-priority-menu"),
     textColorButton: document.querySelector('button[data-action="applyTextColor"]'),
@@ -515,6 +556,8 @@ function bootstrapApp() {
     shareSaveBtn: document.getElementById("share-dialog-save"),
     shareCancelBtn: document.getElementById("share-dialog-cancel"),
   };
+
+  setPreferredClozePriority(readPersistedPreferredClozePriority(), { persist: false });
 
   if (ui.mobileAddNoteBtn && ui.addNoteBtn) {
     const referenceLabel =
@@ -1713,6 +1756,56 @@ function bootstrapApp() {
       return;
     }
     setToolbarMoreMenu(false);
+  }
+
+  function formatPreferredClozePriorityTitle(priority) {
+    const normalized = normalizeClozePriorityValue(priority);
+    const suffix = CLOZE_PRIORITY_LABELS[normalized] || CLOZE_PRIORITY_LABELS[CLOZE_DEFAULT_PRIORITY];
+    return `Créer un texte à trous (priorité ${suffix})`;
+  }
+
+  function updatePreferredClozePriorityUI(priority) {
+    const normalized = normalizeClozePriorityValue(priority);
+    if (ui.clozeDropdownMain) {
+      ui.clozeDropdownMain.dataset.priority = normalized;
+      const title = formatPreferredClozePriorityTitle(normalized);
+      ui.clozeDropdownMain.title = title;
+      const srLabel = ui.clozeDropdownMain.querySelector(".sr-only");
+      if (srLabel) {
+        srLabel.textContent = title;
+      }
+    }
+
+    if (ui.clozeDropdownMenu) {
+      const items = ui.clozeDropdownMenu.querySelectorAll('button[data-action="createCloze"]');
+      items.forEach((item) => {
+        const itemPriority = normalizeClozePriorityValue(item.dataset.priority);
+        if (itemPriority === normalized) {
+          item.dataset.selected = "true";
+          item.setAttribute("aria-current", "true");
+        } else {
+          delete item.dataset.selected;
+          item.removeAttribute("aria-current");
+        }
+      });
+    }
+  }
+
+  function getPreferredClozePriority() {
+    const normalized = normalizeClozePriorityValue(state.preferredClozePriority);
+    state.preferredClozePriority = normalized;
+    return normalized;
+  }
+
+  function setPreferredClozePriority(priority, options = {}) {
+    const normalized = normalizeClozePriorityValue(priority);
+    const hasChanged = state.preferredClozePriority !== normalized;
+    state.preferredClozePriority = normalized;
+    updatePreferredClozePriorityUI(normalized);
+    if (hasChanged && options.persist !== false) {
+      persistPreferredClozePriority(normalized);
+    }
+    return normalized;
   }
 
   function isClozeDropdownOpen() {
@@ -6175,13 +6268,18 @@ function bootstrapApp() {
         toggleClozeDropdown();
       } else if (action === "createCloze") {
         handledBySelectionHelper = true;
-        const priority = normalizeClozePriorityValue(button.dataset.priority);
         const insideDropdownMenu = Boolean(button.closest(".toolbar-dropdown-menu"));
-        runWithPreservedSelection(() => {
-          createClozeFromSelection(priority);
-        });
         if (insideDropdownMenu) {
+          const selectedPriority = normalizeClozePriorityValue(button.dataset.priority);
+          const appliedPriority = setPreferredClozePriority(selectedPriority);
+          runWithPreservedSelection(() => {
+            createClozeFromSelection(appliedPriority);
+          });
           setClozeDropdown(false, { focusTarget: "toggle" });
+        } else {
+          runWithPreservedSelection(() => {
+            createClozeFromSelection(getPreferredClozePriority());
+          });
         }
       } else if (action === "insertDropdown") {
         handledBySelectionHelper = true;
