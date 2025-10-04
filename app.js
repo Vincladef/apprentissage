@@ -368,10 +368,6 @@ function bootstrapApp() {
       lastFocusedElement: null,
     };
   }
-
-
-
-  const relativeTime = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit"
@@ -1956,31 +1952,6 @@ function bootstrapApp() {
       unwrapEditorImage(wrapper);
     });
     return container.innerHTML;
-  }
-
-  function formatRelativeDate(date) {
-    if (!(date instanceof Date)) {
-      return "Jamais enregistré";
-    }
-    const now = new Date();
-    const diffMs = date.getTime() - now.getTime();
-    const absMs = Math.abs(diffMs);
-    const minutes = Math.round(absMs / 60000);
-    if (minutes < 1) {
-      return "À l'instant";
-    }
-    if (minutes < 60) {
-      const value = diffMs < 0 ? -minutes : minutes;
-      return relativeTime.format(value, "minute");
-    }
-    const hours = Math.round(absMs / 3600000);
-    if (hours < 24) {
-      const value = diffMs < 0 ? -hours : hours;
-      return relativeTime.format(value, "hour");
-    }
-    const days = Math.round(absMs / 86400000);
-    const value = diffMs < 0 ? -days : days;
-    return relativeTime.format(value, "day");
   }
 
   function updateSaveStatus(stateValue, date = null) {
