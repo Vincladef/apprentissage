@@ -688,8 +688,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .note-row {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  align-items: stretch;
+  gap: 0.45rem;
   width: 100%;
   padding-left: calc(var(--note-depth, 0) * var(--note-indent-step));
 }
@@ -783,11 +783,13 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .note-row-actions {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.35rem;
   flex: 0 0 auto;
   margin-left: auto;
+  padding-left: 0.2rem;
 }
 
 .note-children {
@@ -900,6 +902,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   .note-row-actions {
     grid-area: actions;
     display: flex;
+    align-items: center;
     justify-content: flex-start;
     flex-wrap: wrap;
     column-gap: 0.35rem;
