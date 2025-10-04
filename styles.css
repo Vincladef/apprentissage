@@ -624,7 +624,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(260px, 0.3fr) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 0.38fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
   transition: grid-template-columns 0.3s ease;
@@ -2610,6 +2610,7 @@ body.notes-drawer-open .drawer-overlay {
     gap: 1.35rem;
     padding: 1.35rem 1.25rem 2rem;
     width: min(100%, 1080px);
+    grid-template-columns: minmax(320px, 0.38fr) minmax(0, 1fr);
   }
 }
 
