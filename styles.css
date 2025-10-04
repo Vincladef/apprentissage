@@ -688,36 +688,18 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .note-row {
   display: flex;
-  align-items: stretch;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.35rem;
   width: 100%;
   padding-left: calc(var(--note-depth, 0) * var(--note-indent-step));
 }
 
-.note-toggle,
-.note-toggle-spacer {
+.note-toggle {
   flex: 0 0 auto;
   width: var(--note-toggle-size);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-@media (min-width: 901px) {
-  .note-row--no-toggle .note-toggle-spacer {
-    width: 0;
-  }
-
-  .note-row--no-toggle {
-    gap: 0;
-  }
-
-  .note-row--no-toggle .note-row-actions {
-    margin-left: 0.3rem;
-  }
-}
-
-.note-toggle {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 0.5rem;
@@ -727,6 +709,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   font-size: 0.9rem;
   height: calc(var(--note-toggle-size) + 0.25rem);
 }
+
+
 
 .note-toggle:hover {
   background: rgba(26, 115, 232, 0.12);
@@ -807,8 +791,10 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .note-row-actions {
   display: inline-flex;
-  gap: 0.25rem;
   align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .note-children {
@@ -832,11 +818,6 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   padding: 0;
 }
 
-.note-toggle-spacer {
-  color: transparent;
-  height: calc(var(--note-toggle-size) + 0.25rem);
-}
-
 .note-row-actions .icon-button {
   width: 1.75rem;
   height: 1.75rem;
@@ -844,6 +825,11 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.note-row-actions .note-toggle {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .icon-button {
@@ -888,20 +874,20 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   .note-row {
     position: relative;
     display: grid;
-    grid-template-columns: var(--note-toggle-size) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "toggle card"
-      "toggle actions";
+      "card"
+      "actions";
     align-items: start;
     padding-left: calc(var(--note-depth, 0) * var(--note-indent-step));
-    gap: 0.35rem 0.4rem;
+    gap: 0.35rem;
   }
 
   .note-row::before {
     content: "";
     position: absolute;
     top: 0.45rem;
-    left: calc(var(--note-depth, 0) * var(--note-indent-step) + (var(--note-toggle-size) / 2));
+    left: calc(var(--note-depth, 0) * var(--note-indent-step) + 0.65rem);
     width: 1px;
     height: calc(var(--note-toggle-size) + 0.25rem);
     background: var(--note-connector-color);
@@ -912,15 +898,6 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   .note-row[style*="--note-depth: 0"]::before,
   .note-row[style*="--note-depth:0"]::before {
     content: none;
-  }
-
-  .note-toggle,
-  .note-toggle-spacer {
-    grid-area: toggle;
-    align-self: start;
-    justify-self: start;
-    height: var(--note-toggle-size);
-    grid-row: 1 / span 2;
   }
 
   .note-card {
@@ -937,11 +914,21 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
     width: 100%;
     margin-top: 0;
     padding: 0;
+    margin-left: 0;
+  }
+
+  .note-row-actions .note-toggle {
+    order: 0;
   }
 
   .note-row-actions .icon-button {
     width: auto;
     height: auto;
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+  }
+
+  .note-row-actions .note-toggle {
     min-width: 2.2rem;
     min-height: 2.2rem;
   }
