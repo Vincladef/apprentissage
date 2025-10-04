@@ -739,9 +739,9 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .note-card--root {
-  background: rgba(60, 64, 67, 0.06);
-  color: #2d3748;
-  border-left-color: rgba(60, 64, 67, 0.3);
+  background: #f3f4f6;
+  color: #1f2937;
+  border-left-color: rgba(60, 64, 67, 0.28);
 }
 
 .note-card:hover {
@@ -751,8 +751,9 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .note-card--root:hover,
 .note-card--root:focus-visible {
-  background: rgba(60, 64, 67, 0.14);
-  color: #1f2937;
+  background: #e5e7eb;
+  color: #111827;
+  border-left-color: rgba(26, 115, 232, 0.35);
 }
 
 .note-card.active {
@@ -763,8 +764,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .note-card--root:active {
-  background: rgba(26, 115, 232, 0.18);
-  color: #1f2937;
+  background: rgba(26, 115, 232, 0.16);
+  color: #0f172a;
 }
 
 .note-card--root.active {
