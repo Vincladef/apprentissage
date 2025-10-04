@@ -5449,10 +5449,14 @@ function bootstrapApp() {
       }
     }
 
+    const pendingToken = `cloze-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+
     const htmlToInsert = nodesToInsert
       .map(({ node, block }) => {
         const clonedNode = node.cloneNode(true);
-        clonedNode.setAttribute("data-cloze-pending", "1");
+        clonedNode.setAttribute("data-cloze-pending", pendingToken);
         if (block) {
           clonedNode.setAttribute("data-cloze-pending-block", "1");
         }
@@ -5470,7 +5474,9 @@ function bootstrapApp() {
     document.execCommand("insertHTML", false, htmlToInsert);
 
     const insertedClozeEntries = Array.from(
-      ui.noteEditor.querySelectorAll("[data-cloze-pending]")
+      ui.noteEditor.querySelectorAll(
+        `[data-cloze-pending="${pendingToken}"]`
+      )
     ).map((node) => {
       const block = node.getAttribute("data-cloze-pending-block") === "1";
       node.removeAttribute("data-cloze-pending");
