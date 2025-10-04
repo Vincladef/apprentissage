@@ -1734,13 +1734,10 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .editor .cloze--block {
   box-sizing: border-box;
-  border-radius: 1.25rem;
-  width: 100%;
-}
-
-.editor .cloze--block:not(ul):not(ol):not(li):not(table) {
-  display: block;
-  padding: 0.35rem 0.85rem;
+  border-radius: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px dashed rgba(26, 115, 232, 0.35);
+  background: rgba(26, 115, 232, 0.08);
 }
 
 .editor .cloze--block.cloze-masked:not(ul):not(ol):not(li):not(table) {
@@ -1753,33 +1750,19 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 
 .editor ul.cloze--block,
 .editor ol.cloze--block {
-  padding: 0.45rem 0.85rem 0.45rem 2rem;
-  border-radius: 1.25rem;
-}
-
-.editor ul.cloze--block.cloze-masked,
-.editor ol.cloze--block.cloze-masked {
-  display: block;
+  padding: 0.45rem 0.65rem 0.45rem 2rem;
+  border-radius: 0.85rem;
 }
 
 .editor li.cloze--block {
-  display: list-item;
   list-style-position: inside;
-  padding: 0.35rem 0.85rem;
-  border-radius: 1.25rem;
-}
-
-.editor li.cloze--block.cloze-masked {
-  display: list-item;
+  padding: 0.3rem 0.65rem;
+  border-radius: 0.85rem;
 }
 
 .editor table.cloze--block {
-  display: table;
-  width: 100%;
-}
-
-.editor table.cloze--block.cloze-masked {
-  display: table;
+  border-spacing: 0;
+  border-collapse: separate;
 }
 
 .editor .cloze.cloze-priority-hidden {
