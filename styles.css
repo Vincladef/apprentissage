@@ -1744,9 +1744,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 }
 
 .editor .cloze--block.cloze-masked:not(ul):not(ol):not(li):not(table) {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  position: relative;
 }
 
 .editor .cloze--block.cloze-masked::after {
@@ -1837,9 +1835,8 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .editor .cloze.cloze-masked {
   color: transparent;
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+  display: inline-block;
+  vertical-align: baseline;
 }
 
 .editor .cloze.cloze-masked.cloze-priority-high {
@@ -1864,6 +1861,13 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   font-weight: 600;
   font-size: 0.72rem;
   text-transform: uppercase;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: inherit;
+  pointer-events: none;
 }
 
 .editor .cloze.cloze-masked:hover {
