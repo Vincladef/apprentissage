@@ -3221,6 +3221,9 @@ function bootstrapApp() {
     const noteCard = document.createElement("button");
     noteCard.type = "button";
     noteCard.className = "note-card";
+    if (level === 1) {
+      noteCard.classList.add("note-card--root");
+    }
     noteCard.dataset.noteId = note.id;
     noteCard.setAttribute("role", "treeitem");
     noteCard.setAttribute("aria-level", String(level));

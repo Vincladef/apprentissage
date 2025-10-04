@@ -754,9 +754,21 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
+.note-card--root {
+  background: rgba(60, 64, 67, 0.06);
+  color: #2d3748;
+  border-left-color: rgba(60, 64, 67, 0.3);
+}
+
 .note-card:hover {
   background: rgba(60, 64, 67, 0.08);
   border-left-color: rgba(26, 115, 232, 0.35);
+}
+
+.note-card--root:hover,
+.note-card--root:focus-visible {
+  background: rgba(60, 64, 67, 0.14);
+  color: #1f2937;
 }
 
 .note-card.active {
@@ -764,6 +776,18 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   border-left-color: var(--accent);
   background: rgba(26, 115, 232, 0.12);
   box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.2);
+}
+
+.note-card--root:active {
+  background: rgba(26, 115, 232, 0.18);
+  color: #1f2937;
+}
+
+.note-card--root.active {
+  background: rgba(26, 115, 232, 0.18);
+  color: #0f172a;
+  border-color: rgba(26, 115, 232, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(26, 115, 232, 0.3);
 }
 
 .note-card-title {
