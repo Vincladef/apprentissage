@@ -28,6 +28,7 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 import { signIn, signUp, resetPassword } from "./auth.js";
 import { shareNoteByEmail } from "./sharing.js";
+import { prepareNodesForClozeInsertion } from "./cloze-utils.mjs";
 
 const REQUIRED_FIREBASE_CONFIG_KEYS = [
   "apiKey",
@@ -5622,8 +5623,15 @@ function bootstrapApp() {
     const containsBlockNodes = fragmentContainsBlockNodes(fragment);
     const wrapperTagName = containsBlockNodes ? "div" : "span";
     const wrapper = document.createElement(wrapperTagName);
-    while (fragment.firstChild) {
-      wrapper.appendChild(fragment.firstChild);
+    const nodesToInsert = prepareNodesForClozeInsertion(fragment, range);
+    if (nodesToInsert.length) {
+      nodesToInsert.forEach((node) => {
+        wrapper.appendChild(node);
+      });
+    } else {
+      while (fragment.firstChild) {
+        wrapper.appendChild(fragment.firstChild);
+      }
     }
 
     if (!wrapper.hasChildNodes()) {
