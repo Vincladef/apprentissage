@@ -1,6 +1,61 @@
 const LIST_ITEM_TAGS = new Set(["LI", "DT", "DD"]);
 const LIST_CONTAINER_TAGS = new Set(["UL", "OL", "DL"]);
 
+function isElementNode(node) {
+  return Boolean(node && node.nodeType === Node.ELEMENT_NODE);
+}
+
+function isListItemElement(node) {
+  return Boolean(isElementNode(node) && LIST_ITEM_TAGS.has(node.tagName));
+}
+
+function isListContainerElement(node) {
+  return Boolean(isElementNode(node) && LIST_CONTAINER_TAGS.has(node.tagName));
+}
+
+function isListContentNode(node) {
+  return isListItemElement(node) || isListContainerElement(node);
+}
+
+function getStartingElement(node) {
+  if (!node) {
+    return null;
+  }
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    return node;
+  }
+  return node.parentElement || null;
+}
+
+function findAncestorElement(node, predicate) {
+  let current = getStartingElement(node);
+  while (current) {
+    if (predicate(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function findListContainerInRange(range) {
+  if (!range) {
+    return null;
+  }
+  const startContainer = findAncestorElement(range.startContainer, isListContainerElement);
+  const endContainer = findAncestorElement(range.endContainer, isListContainerElement);
+  if (startContainer && (!endContainer || startContainer === endContainer)) {
+    return startContainer;
+  }
+  if (endContainer && !startContainer) {
+    return endContainer;
+  }
+  if (startContainer && endContainer && startContainer === endContainer) {
+    return startContainer;
+  }
+  return null;
+}
+
 function collectListItemsInRange(range) {
   if (!range || !range.commonAncestorContainer) {
     return [];
@@ -82,3 +137,47 @@ export function prepareNodesForClozeInsertion(fragment, range) {
 
   return normalizedNodes;
 }
+
+export function resolveListWrapperForNodes(nodes, range) {
+  const normalizedNodes = Array.isArray(nodes) ? nodes : Array.from(nodes || []);
+  if (!normalizedNodes.length) {
+    return { wrapper: null, nodesToAppend: [], isListWrapper: false };
+  }
+
+  const elementNodes = normalizedNodes.filter(isElementNode);
+  if (!elementNodes.length) {
+    return { wrapper: null, nodesToAppend: [], isListWrapper: false };
+  }
+
+  const containsOnlyListNodes = elementNodes.every(isListContentNode);
+  if (!containsOnlyListNodes) {
+    return { wrapper: null, nodesToAppend: [], isListWrapper: false };
+  }
+
+  const listContainers = elementNodes.filter(isListContainerElement);
+  if (listContainers.length === 1) {
+    const wrapper = listContainers[0];
+    const nodesToAppend = normalizedNodes.filter((node) => node !== wrapper);
+    return { wrapper, nodesToAppend, isListWrapper: true };
+  }
+
+  if (listContainers.length === 0) {
+    const sourceContainer = findListContainerInRange(range);
+    if (sourceContainer) {
+      const wrapper = sourceContainer.cloneNode(false);
+      return {
+        wrapper,
+        nodesToAppend: normalizedNodes,
+        isListWrapper: true,
+      };
+    }
+  }
+
+  return { wrapper: null, nodesToAppend: [], isListWrapper: false };
+}
+
+export const __TEST_ONLY__ = {
+  isListItemElement,
+  isListContainerElement,
+  findListContainerInRange,
+};
