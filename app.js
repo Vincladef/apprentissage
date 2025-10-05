@@ -4725,6 +4725,7 @@ function bootstrapApp() {
       return;
     }
     restoreEditorSelection();
+    const preservedSelection = captureSelection(ui.noteEditor);
     const result = operation();
     let selectionOverride = null;
     if (result instanceof Range || result instanceof Node) {
@@ -4737,8 +4738,12 @@ function bootstrapApp() {
       }
     }
     const updatedSelection = captureSelection(ui.noteEditor);
+    const selectionToPreserve =
+      selectionOverride || !preservedSelection
+        ? updatedSelection || preservedSelection
+        : preservedSelection;
     focusEditorPreservingSelection({
-      savedSelection: updatedSelection,
+      savedSelection: selectionToPreserve,
       selectionOverride,
     });
     return result;
