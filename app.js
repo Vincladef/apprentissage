@@ -100,8 +100,8 @@ function bootstrapApp() {
   const HIGHLIGHT_COLOR = "#fde68a";
   const DEFAULT_TEXT_COLOR = "#1f2937";
   const DEFAULT_FONT_FAMILY = "Arial";
-  const FONT_SIZE_STEPS = [10, 11, 12, 14, 18, 24, 32];
-  const DEFAULT_FONT_SIZE_INDEX = 1;
+  const FONT_SIZE_STEPS = [8, 9, 10, 11, 12, 14, 18, 24, 32];
+  const DEFAULT_FONT_SIZE_INDEX = 3;
   const TEXT_COLOR_PRESETS = [
     { value: "#0f172a", label: "Bleu nuit" },
     { value: "#1f2937", label: "Gris anthracite" },
