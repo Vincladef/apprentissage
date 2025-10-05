@@ -655,7 +655,7 @@ function bootstrapApp() {
     clozeDropdownMain: document.querySelector("#cloze-priority-dropdown .toolbar-dropdown-main"),
     clozeDropdownToggle: document.getElementById("cloze-priority-toggle"),
     clozeDropdownMenu: document.getElementById("cloze-priority-menu"),
-    linkedClozeButton: document.querySelector('button[data-action="createLinkedCloze"]'),
+    linkedClozeButton: null,
     textColorButton: document.querySelector('button[data-action="applyTextColor"]'),
     textColorPopover: document.getElementById("text-color-popover"),
     textColorOptions: document.getElementById("text-color-options"),
@@ -691,6 +691,10 @@ function bootstrapApp() {
     shareSaveBtn: document.getElementById("share-dialog-save"),
     shareCancelBtn: document.getElementById("share-dialog-cancel"),
   };
+
+  ui.linkedClozeButton =
+    ui.clozeDropdownMenu?.querySelector('button[data-action="createLinkedCloze"]') ??
+    document.querySelector('button[data-action="createLinkedCloze"]');
 
   setPreferredClozePriority(readPersistedPreferredClozePriority(), { persist: false });
 
@@ -1918,15 +1922,29 @@ function bootstrapApp() {
       }
     }
 
-    if (ui.linkedClozeButton) {
-      ui.linkedClozeButton.dataset.priority = normalized;
+    const linkedClozeButtons = document.querySelectorAll(
+      'button[data-action="createLinkedCloze"]'
+    );
+
+    if (linkedClozeButtons.length > 0) {
+      ui.linkedClozeButton = linkedClozeButtons[0];
+    }
+
+    linkedClozeButtons.forEach((linkedButton) => {
+      linkedButton.dataset.priority = normalized;
       const linkedTitle = formatLinkedClozePriorityTitle(normalized);
-      ui.linkedClozeButton.title = linkedTitle;
-      const linkedSrLabel = ui.linkedClozeButton.querySelector(".sr-only");
+      linkedButton.title = linkedTitle;
+      const linkedVisibleLabel = linkedButton.querySelector(
+        "[data-linked-cloze-visible-label]"
+      );
+      if (linkedVisibleLabel) {
+        linkedVisibleLabel.textContent = linkedTitle;
+      }
+      const linkedSrLabel = linkedButton.querySelector(".sr-only");
       if (linkedSrLabel) {
         linkedSrLabel.textContent = linkedTitle;
       }
-    }
+    });
 
     if (ui.clozeDropdownMenu) {
       const items = ui.clozeDropdownMenu.querySelectorAll('button[data-action="createCloze"]');
@@ -6492,7 +6510,12 @@ function bootstrapApp() {
     if (command || (action && action !== "applyTextColor")) {
       setTextColorPopover(false);
     }
-    if (command || (action && action !== "toggleClozeDropdown")) {
+    const shouldSkipDefaultClozeClose =
+      action === "createCloze" || action === "createLinkedCloze";
+    if (
+      command ||
+      (action && action !== "toggleClozeDropdown" && !shouldSkipDefaultClozeClose)
+    ) {
       setClozeDropdown(false);
     }
     if (state.isRevisionMode) {
@@ -6555,14 +6578,27 @@ function bootstrapApp() {
         }
       } else if (action === "createLinkedCloze") {
         handledBySelectionHelper = true;
-        const preferredPriority = getPreferredClozePriority();
-        persistPreferredClozePriority(preferredPriority);
-        runWithPreservedSelection(() => {
-          createClozeFromSelection({
-            priority: preferredPriority,
-            linkToPrevious: true,
+        const insideDropdownMenu = Boolean(button.closest(".toolbar-dropdown-menu"));
+        if (insideDropdownMenu) {
+          const selectedPriority = normalizeClozePriorityValue(button.dataset.priority);
+          const appliedPriority = setPreferredClozePriority(selectedPriority);
+          runWithPreservedSelection(() => {
+            createClozeFromSelection({
+              priority: appliedPriority,
+              linkToPrevious: true,
+            });
           });
-        });
+          setClozeDropdown(false, { focusTarget: "toggle" });
+        } else {
+          const preferredPriority = getPreferredClozePriority();
+          persistPreferredClozePriority(preferredPriority);
+          runWithPreservedSelection(() => {
+            createClozeFromSelection({
+              priority: preferredPriority,
+              linkToPrevious: true,
+            });
+          });
+        }
       } else if (action === "insertDropdown") {
         handledBySelectionHelper = true;
         runWithPreservedSelection(() => {
