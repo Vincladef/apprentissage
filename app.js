@@ -28,7 +28,10 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 import { signIn, signUp, resetPassword } from "./auth.js";
 import { shareNoteByEmail } from "./sharing.js";
-import { prepareNodesForClozeInsertion } from "./cloze-utils.mjs";
+import {
+  prepareNodesForClozeInsertion,
+  resolveListWrapperForNodes,
+} from "./cloze-utils.mjs";
 
 const REQUIRED_FIREBASE_CONFIG_KEYS = [
   "apiKey",
@@ -5002,6 +5005,12 @@ function bootstrapApp() {
 
   function refreshClozeElement(cloze) {
     if (!cloze) return;
+    cloze.classList.add("cloze");
+    if (shouldTreatNodeAsBlock(cloze)) {
+      cloze.classList.add("cloze--block");
+    } else {
+      cloze.classList.remove("cloze--block");
+    }
     const manualRevealSet = getManualRevealSet();
     const hasManualRevealAttr = cloze.dataset[CLOZE_MANUAL_REVEAL_DATASET_KEY] === "1";
     if (hasManualRevealAttr) {
@@ -5600,8 +5609,11 @@ function bootstrapApp() {
     }
     const normalizedPriority = normalizeClozePriorityValue(priority);
     cloze.classList.add("cloze");
-    if (block) {
+    const shouldBeBlock = block || shouldTreatNodeAsBlock(cloze);
+    if (shouldBeBlock) {
       cloze.classList.add("cloze--block");
+    } else {
+      cloze.classList.remove("cloze--block");
     }
     cloze.classList.add("cloze-masked");
     cloze.dataset.placeholder = generateClozePlaceholder();
@@ -5650,14 +5662,28 @@ function bootstrapApp() {
 
     const fragment = range.cloneContents();
     const containsBlockNodes = fragmentContainsBlockNodes(fragment);
-    const wrapperTagName = containsBlockNodes ? "div" : "span";
-    const wrapper = document.createElement(wrapperTagName);
     const nodesToInsert = prepareNodesForClozeInsertion(fragment, range);
-    if (nodesToInsert.length) {
-      nodesToInsert.forEach((node) => {
-        wrapper.appendChild(node);
+    const listWrapperResolution = resolveListWrapperForNodes(nodesToInsert, range);
+    let wrapper = listWrapperResolution.wrapper || null;
+    let nodesForWrapper = Array.isArray(listWrapperResolution.nodesToAppend)
+      ? listWrapperResolution.nodesToAppend
+      : [];
+    const isListWrapper = Boolean(wrapper && listWrapperResolution.isListWrapper);
+    if (!wrapper) {
+      const wrapperTagName = containsBlockNodes ? "div" : "span";
+      wrapper = document.createElement(wrapperTagName);
+      nodesForWrapper = nodesToInsert;
+    }
+
+    if (nodesForWrapper && nodesForWrapper.length) {
+      nodesForWrapper.forEach((node) => {
+        if (node !== wrapper) {
+          wrapper.appendChild(node);
+        }
       });
-    } else {
+    }
+
+    if (!wrapper.hasChildNodes()) {
       while (fragment.firstChild) {
         wrapper.appendChild(fragment.firstChild);
       }
@@ -5672,7 +5698,9 @@ function bootstrapApp() {
       .slice(2)}`;
 
     wrapper.setAttribute("data-cloze-pending", pendingToken);
-    if (containsBlockNodes) {
+    const shouldMarkAsBlock =
+      containsBlockNodes || isListWrapper || shouldTreatNodeAsBlock(wrapper);
+    if (shouldMarkAsBlock) {
       wrapper.setAttribute("data-cloze-pending-block", "1");
     }
 
