@@ -5040,11 +5040,7 @@ function bootstrapApp() {
     if (getClozeRevisionDelay(cloze) === null) {
       updateClozeRevisionDelayFromScore(cloze, score);
     }
-    if (shouldMaskCloze(cloze, score)) {
-      cloze.setAttribute("contenteditable", "false");
-    } else {
-      cloze.removeAttribute("contenteditable");
-    }
+    cloze.setAttribute("contenteditable", "false");
     updateClozeFeedbackStyle(cloze);
   }
 
@@ -6344,6 +6340,56 @@ function bootstrapApp() {
     });
   }
 
+  function selectClozeGroupContents(members) {
+    if (!Array.isArray(members) || !members.length) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || typeof selection.removeAllRanges !== "function") {
+      return;
+    }
+    const isElementNode = (node) => {
+      if (!node) {
+        return false;
+      }
+      if (typeof Element !== "undefined" && Element && node instanceof Element) {
+        return true;
+      }
+      const elementNodeType =
+        typeof Node !== "undefined" && Node ? Node.ELEMENT_NODE : 1;
+      return node.nodeType === elementNodeType;
+    };
+
+    const validMembers = members
+      .filter((member) => isElementNode(member))
+      .sort((a, b) => {
+        if (a === b) {
+          return 0;
+        }
+        const position = a.compareDocumentPosition(b);
+        if (position & Node.DOCUMENT_POSITION_FOLLOWING) {
+          return -1;
+        }
+        if (position & Node.DOCUMENT_POSITION_PRECEDING) {
+          return 1;
+        }
+        return 0;
+      });
+    if (!validMembers.length) {
+      return;
+    }
+    const range = document.createRange();
+    const firstMember = validMembers[0];
+    const lastMember = validMembers[validMembers.length - 1];
+    if (!firstMember || !lastMember) {
+      return;
+    }
+    range.setStart(firstMember, 0);
+    range.setEnd(lastMember, lastMember.childNodes.length);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
   function handleEditorClick(event) {
     const cloze = closestElement(event.target, ".cloze");
     if (!cloze) {
@@ -6354,6 +6400,7 @@ function bootstrapApp() {
     const manualRevealSet = getManualRevealSet();
     const groupMembers = getClozeLinkGroupMembers(cloze);
     const clickedWasMasked = cloze.classList.contains("cloze-masked");
+    let revealedGroupMember = false;
 
     groupMembers.forEach((member) => {
       if (!member) {
@@ -6389,6 +6436,7 @@ function bootstrapApp() {
 
       if (shouldRefresh) {
         refreshClozeElement(member);
+        revealedGroupMember = true;
       }
     });
 
@@ -6401,6 +6449,9 @@ function bootstrapApp() {
     event.preventDefault();
     hideClozeFeedback();
     showClozeFeedback(cloze);
+    if (state.isRevisionMode && revealedGroupMember) {
+      selectClozeGroupContents(groupMembers);
+    }
   }
 
   function handleClozeFeedbackClick(event) {
