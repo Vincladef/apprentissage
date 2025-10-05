@@ -5639,7 +5639,6 @@ function bootstrapApp() {
       return;
     }
     const range = selection.getRangeAt(0);
-    const fallbackRange = range.cloneRange();
     if (range.collapsed) {
       showToast("Sélectionnez le texte à masquer pour créer un trou.", "warning");
       return;
@@ -5657,6 +5656,12 @@ function bootstrapApp() {
     }
 
     const fragment = range.cloneContents();
+    if (!fragment || !fragment.hasChildNodes()) {
+      if (previousCloze) {
+        setLastCreatedCloze(previousCloze);
+      }
+      return;
+    }
     const containsBlockNodes = fragmentContainsBlockNodes(fragment);
     const nodesToInsert = prepareNodesForClozeInsertion(fragment, range);
     const listWrapperResolution = resolveListWrapperForNodes(nodesToInsert, range);
@@ -5686,88 +5691,46 @@ function bootstrapApp() {
     }
 
     if (!wrapper.hasChildNodes()) {
+      if (previousCloze) {
+        setLastCreatedCloze(previousCloze);
+      }
       return;
     }
 
-    const pendingToken = `cloze-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
-
-    wrapper.setAttribute("data-cloze-pending", pendingToken);
     const shouldMarkAsBlock =
       containsBlockNodes || isListWrapper || shouldTreatNodeAsBlock(wrapper);
-    if (shouldMarkAsBlock) {
-      wrapper.setAttribute("data-cloze-pending-block", "1");
+    const initialized = initializeClozeElement(wrapper, resolvedPriority, {
+      block: shouldMarkAsBlock,
+    });
+    delete initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
+    initialized.removeAttribute(CLOZE_LINK_GROUP_ATTR);
+    if (groupId) {
+      initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
     }
-
-    const container = document.createElement("div");
-    container.appendChild(wrapper);
-    const htmlToInsert = container.innerHTML;
 
     ui.noteEditor.focus();
-    let execCommandResult = false;
-    try {
-      execCommandResult = document.execCommand("insertHTML", false, htmlToInsert);
-    } catch (error) {
-      execCommandResult = false;
+    range.extractContents();
+    range.insertNode(initialized);
+    refreshClozeElement(initialized);
+
+    const selectionRange = document.createRange();
+    if (initialized.parentNode) {
+      selectionRange.setStartAfter(initialized);
+      selectionRange.collapse(true);
+    } else {
+      selectionRange.selectNodeContents(ui.noteEditor);
+      selectionRange.collapse(false);
     }
-
-    let insertedCloze = execCommandResult
-      ? ui.noteEditor.querySelector(`[data-cloze-pending="${pendingToken}"]`)
-      : null;
-
-    if (!execCommandResult) {
-      const pendingFromExec = ui.noteEditor.querySelector(
-        `[data-cloze-pending="${pendingToken}"]`
-      );
-      if (pendingFromExec && pendingFromExec.parentNode) {
-        pendingFromExec.remove();
-      }
+    selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(selectionRange);
     }
-
-    if (!execCommandResult || !insertedCloze) {
-      const manualRange = fallbackRange.cloneRange();
-      insertHtmlFragmentAtSelection(htmlToInsert, { rangeOverride: manualRange });
-      insertedCloze = ui.noteEditor.querySelector(
-        `[data-cloze-pending="${pendingToken}"]`
-      );
-      selection = window.getSelection();
+    ui.noteEditor.focus();
+    if (groupId && previousCloze) {
+      previousCloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
     }
-
-    if (insertedCloze) {
-      const block = insertedCloze.getAttribute("data-cloze-pending-block") === "1";
-      insertedCloze.removeAttribute("data-cloze-pending");
-      insertedCloze.removeAttribute("data-cloze-pending-block");
-      const initialized = initializeClozeElement(insertedCloze, resolvedPriority, {
-        block,
-      });
-      delete initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
-      initialized.removeAttribute(CLOZE_LINK_GROUP_ATTR);
-      if (groupId) {
-        initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
-      }
-      refreshClozeElement(initialized);
-
-      const selectionRange = document.createRange();
-      if (initialized.parentNode) {
-        selectionRange.setStartAfter(initialized);
-        selectionRange.collapse(true);
-      } else {
-        selectionRange.selectNodeContents(ui.noteEditor);
-        selectionRange.collapse(false);
-      }
-      if (selection) {
-        selection.removeAllRanges();
-        selection.addRange(selectionRange);
-      }
-      ui.noteEditor.focus();
-      if (groupId && previousCloze) {
-        previousCloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
-      }
-      setLastCreatedCloze(initialized);
-    } else if (previousCloze) {
-      setLastCreatedCloze(previousCloze);
-    }
+    setLastCreatedCloze(initialized);
 
     handleEditorInput();
   }
