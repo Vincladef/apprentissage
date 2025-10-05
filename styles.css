@@ -638,6 +638,10 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   grid-template-columns: minmax(0, 0) minmax(0, 1fr);
 }
 
+.workspace.sidebar-collapsed .editor-wrapper {
+  max-width: none;
+}
+
 .note-list {
   background: var(--surface-strong);
   border-radius: 1rem;
@@ -977,7 +981,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
   flex: 1 1 auto;
   height: 100%;
   position: relative;
-  max-width: 860px;
+  max-width: clamp(860px, 90vw, 1100px);
   margin: 0 auto;
   width: 100%;
   align-content: start;
@@ -1539,7 +1543,7 @@ body.header-collapsed #mobile-notes-btn[aria-pressed="true"] {
 .editor {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  padding: 2.5rem 3rem;
+  padding: 2.5rem clamp(1.5rem, 4vw, 2.5rem);
   background: #ffffff;
   min-height: 520px;
   line-height: 1.58;
