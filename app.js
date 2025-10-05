@@ -4101,33 +4101,13 @@ function bootstrapApp() {
         return null;
       }
       return runWithPreservedSelection(() => {
-        const selection = window.getSelection();
-        let range =
-          selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-        if (!range) {
-          range = document.createRange();
-          range.selectNodeContents(ui.noteEditor);
-          range.collapse(false);
+        const { range, insertedNodes } = insertHtmlFragmentAtSelection(htmlString);
+        if (range) {
+          return range;
         }
-        const tempWrapper = document.createElement("div");
-        tempWrapper.innerHTML = htmlString;
-        const fragment = document.createDocumentFragment();
-        let lastNode = null;
-        while (tempWrapper.firstChild) {
-          lastNode = fragment.appendChild(tempWrapper.firstChild);
-        }
-        range.deleteContents();
-        range.insertNode(fragment);
-        if (lastNode) {
-          range.setStartAfter(lastNode);
-          range.collapse(true);
-          if (selection) {
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-        }
-        tempWrapper.remove();
-        return lastNode;
+        return insertedNodes.length
+          ? insertedNodes[insertedNodes.length - 1]
+          : null;
       });
     };
 
@@ -5566,6 +5546,54 @@ function bootstrapApp() {
     return false;
   }
 
+  function insertHtmlFragmentAtSelection(htmlString, { rangeOverride = null } = {}) {
+    if (typeof document === "undefined" || !ui.noteEditor) {
+      return { insertedNodes: [], range: null };
+    }
+    if (typeof htmlString !== "string" || htmlString === "") {
+      return { insertedNodes: [], range: null };
+    }
+    const selection = window.getSelection();
+    let targetRange = null;
+    if (rangeOverride instanceof Range) {
+      targetRange = rangeOverride;
+    } else if (selection && selection.rangeCount > 0) {
+      targetRange = selection.getRangeAt(0);
+    }
+    if (!targetRange) {
+      targetRange = document.createRange();
+      targetRange.selectNodeContents(ui.noteEditor);
+      targetRange.collapse(false);
+    }
+
+    const tempWrapper = document.createElement("div");
+    tempWrapper.innerHTML = htmlString;
+    const fragment = document.createDocumentFragment();
+    const insertedNodes = [];
+    while (tempWrapper.firstChild) {
+      const node = tempWrapper.firstChild;
+      insertedNodes.push(node);
+      fragment.appendChild(node);
+    }
+    targetRange.deleteContents();
+    targetRange.insertNode(fragment);
+    tempWrapper.remove();
+
+    if (insertedNodes.length > 0) {
+      const lastInserted = insertedNodes[insertedNodes.length - 1];
+      if (lastInserted.parentNode) {
+        targetRange.setStartAfter(lastInserted);
+      }
+    }
+    targetRange.collapse(true);
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(targetRange);
+    }
+
+    return { insertedNodes, range: targetRange };
+  }
+
   function initializeClozeElement(cloze, priority, { block = false } = {}) {
     if (!cloze) {
       return cloze;
@@ -5597,12 +5625,13 @@ function bootstrapApp() {
         : CLOZE_DEFAULT_PRIORITY
     );
     const linkToPrevious = Boolean(options && options.linkToPrevious);
-    const selection = window.getSelection();
+    let selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       showToast("Sélectionnez du texte à transformer en trou.", "warning");
       return;
     }
     const range = selection.getRangeAt(0);
+    const fallbackRange = range.cloneRange();
     if (range.collapsed) {
       showToast("Sélectionnez le texte à masquer pour créer un trou.", "warning");
       return;
@@ -5652,11 +5681,34 @@ function bootstrapApp() {
     const htmlToInsert = container.innerHTML;
 
     ui.noteEditor.focus();
-    document.execCommand("insertHTML", false, htmlToInsert);
+    let execCommandResult = false;
+    try {
+      execCommandResult = document.execCommand("insertHTML", false, htmlToInsert);
+    } catch (error) {
+      execCommandResult = false;
+    }
 
-    const insertedCloze = ui.noteEditor.querySelector(
-      `[data-cloze-pending="${pendingToken}"]`
-    );
+    let insertedCloze = execCommandResult
+      ? ui.noteEditor.querySelector(`[data-cloze-pending="${pendingToken}"]`)
+      : null;
+
+    if (!execCommandResult) {
+      const pendingFromExec = ui.noteEditor.querySelector(
+        `[data-cloze-pending="${pendingToken}"]`
+      );
+      if (pendingFromExec && pendingFromExec.parentNode) {
+        pendingFromExec.remove();
+      }
+    }
+
+    if (!execCommandResult || !insertedCloze) {
+      const manualRange = fallbackRange.cloneRange();
+      insertHtmlFragmentAtSelection(htmlToInsert, { rangeOverride: manualRange });
+      insertedCloze = ui.noteEditor.querySelector(
+        `[data-cloze-pending="${pendingToken}"]`
+      );
+      selection = window.getSelection();
+    }
 
     if (insertedCloze) {
       const block = insertedCloze.getAttribute("data-cloze-pending-block") === "1";
@@ -5680,8 +5732,10 @@ function bootstrapApp() {
         selectionRange.selectNodeContents(ui.noteEditor);
         selectionRange.collapse(false);
       }
-      selection.removeAllRanges();
-      selection.addRange(selectionRange);
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(selectionRange);
+      }
       ui.noteEditor.focus();
       if (groupId && previousCloze) {
         previousCloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
