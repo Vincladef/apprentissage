@@ -5619,83 +5619,42 @@ function bootstrapApp() {
     }
 
     const fragment = range.cloneContents();
-    const nodesToInsert = [];
+    const containsBlockNodes = fragmentContainsBlockNodes(fragment);
+    const wrapperTagName = containsBlockNodes ? "div" : "span";
+    const wrapper = document.createElement(wrapperTagName);
+    while (fragment.firstChild) {
+      wrapper.appendChild(fragment.firstChild);
+    }
 
-    const registerNodeForInsertion = (node, options = {}) => {
-      const { block = false } = options;
-      nodesToInsert.push({ node, block });
-    };
-
-    if (!fragmentContainsBlockNodes(fragment)) {
-      const inlineWrapper = document.createElement("span");
-      while (fragment.firstChild) {
-        inlineWrapper.appendChild(fragment.firstChild);
-      }
-      registerNodeForInsertion(inlineWrapper, { block: false });
-    } else {
-      const pendingInlineNodes = [];
-      const flushInlineNodes = () => {
-        if (!pendingInlineNodes.length) {
-          return;
-        }
-        const inlineWrapper = document.createElement("span");
-        pendingInlineNodes.forEach((node) => inlineWrapper.appendChild(node));
-        registerNodeForInsertion(inlineWrapper, { block: false });
-        pendingInlineNodes.length = 0;
-      };
-
-      Array.from(fragment.childNodes).forEach((node) => {
-        if (shouldTreatNodeAsBlock(node)) {
-          flushInlineNodes();
-          registerNodeForInsertion(node, { block: true });
-        } else {
-          pendingInlineNodes.push(node);
-        }
-      });
-      flushInlineNodes();
-
-      if (!nodesToInsert.length) {
-        const fallbackWrapper = document.createElement("span");
-        while (fragment.firstChild) {
-          fallbackWrapper.appendChild(fragment.firstChild);
-        }
-        registerNodeForInsertion(fallbackWrapper, { block: false });
-      }
+    if (!wrapper.hasChildNodes()) {
+      return;
     }
 
     const pendingToken = `cloze-${Date.now()}-${Math.random()
       .toString(36)
       .slice(2)}`;
 
-    const htmlToInsert = nodesToInsert
-      .map(({ node, block }) => {
-        const clonedNode = node.cloneNode(true);
-        clonedNode.setAttribute("data-cloze-pending", pendingToken);
-        if (block) {
-          clonedNode.setAttribute("data-cloze-pending-block", "1");
-        }
-        const container = document.createElement("div");
-        container.appendChild(clonedNode);
-        return container.innerHTML;
-      })
-      .join("");
-
-    if (!htmlToInsert) {
-      return;
+    wrapper.setAttribute("data-cloze-pending", pendingToken);
+    if (containsBlockNodes) {
+      wrapper.setAttribute("data-cloze-pending-block", "1");
     }
+
+    const container = document.createElement("div");
+    container.appendChild(wrapper);
+    const htmlToInsert = container.innerHTML;
 
     ui.noteEditor.focus();
     document.execCommand("insertHTML", false, htmlToInsert);
 
-    const insertedClozeEntries = Array.from(
-      ui.noteEditor.querySelectorAll(
-        `[data-cloze-pending="${pendingToken}"]`
-      )
-    ).map((node) => {
-      const block = node.getAttribute("data-cloze-pending-block") === "1";
-      node.removeAttribute("data-cloze-pending");
-      node.removeAttribute("data-cloze-pending-block");
-      const initialized = initializeClozeElement(node, resolvedPriority, {
+    const insertedCloze = ui.noteEditor.querySelector(
+      `[data-cloze-pending="${pendingToken}"]`
+    );
+
+    if (insertedCloze) {
+      const block = insertedCloze.getAttribute("data-cloze-pending-block") === "1";
+      insertedCloze.removeAttribute("data-cloze-pending");
+      insertedCloze.removeAttribute("data-cloze-pending-block");
+      const initialized = initializeClozeElement(insertedCloze, resolvedPriority, {
         block,
       });
       delete initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY];
@@ -5704,14 +5663,10 @@ function bootstrapApp() {
         initialized.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
       }
       refreshClozeElement(initialized);
-      return { node, block };
-    });
 
-    if (insertedClozeEntries.length) {
       const selectionRange = document.createRange();
-      const lastEntry = insertedClozeEntries[insertedClozeEntries.length - 1];
-      if (lastEntry && lastEntry.node.parentNode) {
-        selectionRange.setStartAfter(lastEntry.node);
+      if (initialized.parentNode) {
+        selectionRange.setStartAfter(initialized);
         selectionRange.collapse(true);
       } else {
         selectionRange.selectNodeContents(ui.noteEditor);
@@ -5723,10 +5678,7 @@ function bootstrapApp() {
       if (groupId && previousCloze) {
         previousCloze.dataset[CLOZE_LINK_GROUP_DATASET_KEY] = groupId;
       }
-      const lastClozeNode = lastEntry ? lastEntry.node : null;
-      if (lastClozeNode) {
-        setLastCreatedCloze(lastClozeNode);
-      }
+      setLastCreatedCloze(initialized);
     } else if (previousCloze) {
       setLastCreatedCloze(previousCloze);
     }
