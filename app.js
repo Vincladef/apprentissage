@@ -1903,13 +1903,6 @@ function bootstrapApp() {
     return `Créer un texte à trous (priorité ${suffix})`;
   }
 
-  function formatLinkedClozePriorityTitle(priority) {
-    const normalized = normalizeClozePriorityValue(priority);
-    const suffix =
-      CLOZE_PRIORITY_LABELS[normalized] || CLOZE_PRIORITY_LABELS[CLOZE_DEFAULT_PRIORITY];
-    return `Créer un texte à trous lié (priorité ${suffix})`;
-  }
-
   function updatePreferredClozePriorityUI(priority) {
     const normalized = normalizeClozePriorityValue(priority);
     if (ui.clozeDropdownMain) {
@@ -1929,22 +1922,6 @@ function bootstrapApp() {
     if (linkedClozeButtons.length > 0) {
       ui.linkedClozeButton = linkedClozeButtons[0];
     }
-
-    linkedClozeButtons.forEach((linkedButton) => {
-      linkedButton.dataset.priority = normalized;
-      const linkedTitle = formatLinkedClozePriorityTitle(normalized);
-      linkedButton.title = linkedTitle;
-      const linkedVisibleLabel = linkedButton.querySelector(
-        "[data-linked-cloze-visible-label]"
-      );
-      if (linkedVisibleLabel) {
-        linkedVisibleLabel.textContent = linkedTitle;
-      }
-      const linkedSrLabel = linkedButton.querySelector(".sr-only");
-      if (linkedSrLabel) {
-        linkedSrLabel.textContent = linkedTitle;
-      }
-    });
 
     if (ui.clozeDropdownMenu) {
       const items = ui.clozeDropdownMenu.querySelectorAll('button[data-action="createCloze"]');
@@ -6580,8 +6557,7 @@ function bootstrapApp() {
         handledBySelectionHelper = true;
         const insideDropdownMenu = Boolean(button.closest(".toolbar-dropdown-menu"));
         if (insideDropdownMenu) {
-          const selectedPriority = normalizeClozePriorityValue(button.dataset.priority);
-          const appliedPriority = setPreferredClozePriority(selectedPriority);
+          const appliedPriority = getPreferredClozePriority();
           runWithPreservedSelection(() => {
             createClozeFromSelection({
               priority: appliedPriority,
