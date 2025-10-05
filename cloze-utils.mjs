@@ -1,6 +1,17 @@
 const LIST_ITEM_TAGS = new Set(["LI", "DT", "DD"]);
 const LIST_CONTAINER_TAGS = new Set(["UL", "OL", "DL"]);
 
+export const CLOZE_GROUP_ATTR = "data-group";
+export const CLOZE_PRIORITY_ATTR = "data-priority";
+
+export function generateClozeGroupId() {
+  if (typeof crypto !== "undefined" && crypto && typeof crypto.randomUUID === "function") {
+    return `g-${crypto.randomUUID()}`;
+  }
+  const random = Math.random().toString(36).slice(2);
+  return `g-${random}`;
+}
+
 function isElementNode(node) {
   return Boolean(node && node.nodeType === Node.ELEMENT_NODE);
 }
