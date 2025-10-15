@@ -20,13 +20,21 @@
           <button
             type="button"
             id="mobile-notes-btn"
-            class="header-icon-button"
+            class="header-icon-button workspace-only"
             aria-label="Afficher les fiches"
             aria-pressed="false"
             aria-expanded="true"
           >
             ☰
             <span class="sr-only">Afficher les fiches</span>
+          </button>
+          <button
+            type="button"
+            id="back-to-courses-btn"
+            class="ghost header-back-button workspace-only"
+            aria-label="Revenir à la liste des cours"
+          >
+            ← Tous les cours
           </button>
           <div class="brand-text">
             <h1>Apprentissage actif</h1>
@@ -36,7 +44,7 @@
             <button
               type="button"
               id="revision-mode-toggle"
-              class="header-mode-toggle ghost"
+              class="header-mode-toggle ghost workspace-only"
               aria-pressed="false"
               aria-label="Activer le mode révision"
             >
@@ -77,7 +85,7 @@
         <button
           type="button"
           id="revision-iteration-btn"
-          class="header-iteration-btn"
+          class="header-iteration-btn workspace-only"
           aria-label="Lancer une nouvelle itération"
         >
           Nouvelle itération
@@ -341,6 +349,18 @@
         </div>
       </section>
 
+      <section id="course-dashboard" class="view hidden">
+        <div class="courses-page" aria-labelledby="courses-title">
+          <header class="courses-page__header">
+            <div>
+              <h2 id="courses-title">Vos cours</h2>
+              <p class="muted">Choisissez un cours pour afficher vos fiches ou créez-en un nouveau.</p>
+            </div>
+          </header>
+          <div id="course-grid" class="course-grid" role="list"></div>
+        </div>
+      </section>
+
       <section id="workspace" class="view hidden">
         <div class="workspace">
           <aside class="note-list" aria-label="Mes fiches">
@@ -397,6 +417,41 @@
         <div id="drawer-overlay" class="drawer-overlay" hidden></div>
       </section>
     </main>
+
+    <div
+      id="course-form-overlay"
+      class="course-form-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-form-title"
+      aria-hidden="true"
+      tabindex="-1"
+    >
+      <div class="course-form-card" role="document">
+        <header class="course-form-card__header">
+          <h2 id="course-form-title">Nouveau cours</h2>
+          <button type="button" id="course-form-close" class="header-icon-button" aria-label="Fermer la fenêtre de création de cours">✕</button>
+        </header>
+        <form id="course-form" class="course-form" novalidate>
+          <label for="course-name">Nom du cours</label>
+          <input id="course-name" name="name" type="text" placeholder="Ex. Mathématiques" autocomplete="off" required maxlength="120" />
+          <label for="course-image">Image représentative (optionnel)</label>
+          <input
+            id="course-image"
+            name="image"
+            type="url"
+            inputmode="url"
+            placeholder="https://..."
+            autocomplete="off"
+          />
+          <p id="course-form-error" class="form-message error hidden" role="alert"></p>
+          <div class="course-form__actions">
+            <button type="button" id="course-form-cancel" class="ghost">Annuler</button>
+            <button type="submit" id="course-form-submit">Créer le cours</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div id="share-dialog-backdrop" class="share-dialog-backdrop hidden" aria-hidden="true"></div>
     <section
