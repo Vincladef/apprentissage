@@ -772,6 +772,29 @@ function bootstrapApp() {
     }
   }
 
+  async function createCourseDocument(payload, options = {}) {
+    const { imageUrl } = options;
+    const coursesRef = collection(db, "users", state.userId, "courses");
+    try {
+      return await addDoc(coursesRef, payload);
+    } catch (error) {
+      const hasImageFallback =
+        Boolean(imageUrl) && typeof payload.coverImageUrl === "string";
+      if (!hasImageFallback || !isPermissionDenied(error)) {
+        throw error;
+      }
+
+      try {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.coverImageUrl;
+        fallbackPayload.coverUrl = imageUrl;
+        return await addDoc(coursesRef, fallbackPayload);
+      } catch (fallbackError) {
+        throw fallbackError;
+      }
+    }
+  }
+
   async function handleCourseFormSubmit(event) {
     event.preventDefault();
     if (!state.userId || !ui.courseForm) {
@@ -807,13 +830,13 @@ function bootstrapApp() {
       if (imageUrl) {
         payload.coverImageUrl = imageUrl;
       }
-      const coursesRef = collection(db, "users", state.userId, "courses");
-      const docRef = await addDoc(coursesRef, payload);
+      const docRef = await createCourseDocument(payload, { imageUrl });
       state.pendingCourseSelectionId = docRef.id;
       closeCourseForm();
       showToast("Cours créé", "success");
     } catch (error) {
       if (isPermissionDenied(error)) {
+        reportPermissionIssue("Création de cours refusée par Firestore");
         showCourseFormError("Vous n'avez pas la permission de créer un cours.");
       } else {
         console.error("Impossible de créer le cours", error);
