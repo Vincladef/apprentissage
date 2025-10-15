@@ -184,6 +184,7 @@ function bootstrapApp() {
     [SHARE_ROLE_EDITOR]: "Éditeur",
   };
   const SHARE_SEARCH_DEBOUNCE_MS = 320;
+  const COURSE_UNASSIGNED_KEY = "__unassigned__";
 
   function normalizeShareRole(role) {
     if (typeof role === "string") {
@@ -193,6 +194,25 @@ function bootstrapApp() {
       }
     }
     return SHARE_ROLE_VIEWER;
+  }
+
+  function sanitizeImageUrl(value) {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      const url = new URL(trimmed, window.location.origin);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return url.href;
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
   }
 
   function sanitizeMembersRecord(rawMembers) {
@@ -259,12 +279,22 @@ function bootstrapApp() {
     profile: null,
     activeAuthView: "login",
     notesUnsubscribe: null,
+    coursesUnsubscribe: null,
     notes: [],
     notesById: new Map(),
     collapsedNoteIds: new Set(),
     currentNoteId: null,
     currentNote: null,
+    courses: [],
+    coursesById: new Map(),
+    currentCourseId: null,
+    currentCourse: null,
+    isViewingUnassignedCourse: false,
+    hasSelectedCourse: false,
+    courseNoteCounts: new Map(),
+    allNotesFlat: [],
     pendingSelectionId: null,
+    pendingCourseSelectionId: null,
     pendingSave: null,
     hasUnsavedChanges: false,
     lastSavedAt: null,
@@ -278,6 +308,7 @@ function bootstrapApp() {
     savedSelection: null,
     [CLOZE_MANUAL_REVEAL_SET_KEY]: new WeakSet(),
     share: createShareState(),
+    defaultBrandSubtitle: "",
   };
 
   const imageResizeState = {
@@ -318,6 +349,7 @@ function bootstrapApp() {
 
   const views = {
     login: document.getElementById("login-screen"),
+    courses: document.getElementById("course-dashboard"),
     workspace: document.getElementById("workspace")
   };
 
@@ -335,6 +367,8 @@ function bootstrapApp() {
     logoutBtn: document.getElementById("logout-btn"),
     headerMenuBtn: document.getElementById("workspace-menu-btn"),
     headerMenu: document.getElementById("workspace-menu"),
+    brandSubtitle: document.querySelector(".brand .subtitle"),
+    backToCoursesBtn: document.getElementById("back-to-courses-btn"),
     addNoteBtn: document.getElementById("add-note-btn"),
     mobileAddNoteBtn: document.getElementById("mobile-add-note-btn"),
     notesContainer: document.getElementById("notes-container"),
@@ -376,7 +410,18 @@ function bootstrapApp() {
     shareDialogError: document.getElementById("share-dialog-error"),
     shareSaveBtn: document.getElementById("share-dialog-save"),
     shareCancelBtn: document.getElementById("share-dialog-cancel"),
+    courseGrid: document.getElementById("course-grid"),
+    courseFormOverlay: document.getElementById("course-form-overlay"),
+    courseForm: document.getElementById("course-form"),
+    courseNameInput: document.getElementById("course-name"),
+    courseImageInput: document.getElementById("course-image"),
+    courseFormError: document.getElementById("course-form-error"),
+    courseFormCancel: document.getElementById("course-form-cancel"),
+    courseFormClose: document.getElementById("course-form-close"),
+    courseFormSubmit: document.getElementById("course-form-submit"),
   };
+
+  state.defaultBrandSubtitle = ui.brandSubtitle?.textContent?.trim() || "";
 
   if (ui.mobileAddNoteBtn && ui.addNoteBtn) {
     const referenceLabel =
@@ -647,13 +692,449 @@ function bootstrapApp() {
     setNotesButtonLabel(isOpen ? "Masquer les fiches" : "Afficher les fiches");
   }
 
+  function updateBrandSubtitle(text) {
+    if (!ui.brandSubtitle) {
+      return;
+    }
+    const hasText = typeof text === "string" && text.trim() !== "";
+    ui.brandSubtitle.textContent = hasText ? text.trim() : state.defaultBrandSubtitle;
+  }
+
+  function formatCourseNoteCount(count) {
+    if (!Number.isFinite(count) || count <= 0) {
+      return "Aucune fiche";
+    }
+    if (count === 1) {
+      return "1 fiche";
+    }
+    return `${count} fiches`;
+  }
+
+  function clearCourseFormError() {
+    if (ui.courseFormError) {
+      ui.courseFormError.textContent = "";
+      ui.courseFormError.classList.add("hidden");
+    }
+  }
+
+  function showCourseFormError(message) {
+    if (!ui.courseFormError) {
+      return;
+    }
+    ui.courseFormError.textContent = message;
+    ui.courseFormError.classList.remove("hidden");
+  }
+
+  function setCourseFormLoading(isLoading) {
+    if (ui.courseFormSubmit) {
+      ui.courseFormSubmit.disabled = Boolean(isLoading);
+    }
+  }
+
+  function openCourseForm() {
+    if (!ui.courseFormOverlay || !ui.courseForm) {
+      return;
+    }
+    clearCourseFormError();
+    setCourseFormLoading(false);
+    ui.courseForm.reset();
+    ui.courseFormOverlay.classList.remove("hidden");
+    ui.courseFormOverlay.setAttribute("aria-hidden", "false");
+    ui.courseFormOverlay.setAttribute("tabindex", "-1");
+    document.body.classList.add("course-form-open");
+    requestAnimationFrame(() => {
+      if (ui.courseNameInput) {
+        ui.courseNameInput.focus();
+      }
+    });
+  }
+
+  function closeCourseForm() {
+    if (!ui.courseFormOverlay) {
+      return;
+    }
+    ui.courseFormOverlay.classList.add("hidden");
+    ui.courseFormOverlay.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("course-form-open");
+    if (ui.courseForm) {
+      ui.courseForm.reset();
+    }
+    clearCourseFormError();
+    setCourseFormLoading(false);
+  }
+
+  function handleCourseOverlayClick(event) {
+    if (!ui.courseFormOverlay) {
+      return;
+    }
+    if (event.target === ui.courseFormOverlay) {
+      closeCourseForm();
+    }
+  }
+
+  async function handleCourseFormSubmit(event) {
+    event.preventDefault();
+    if (!state.userId || !ui.courseForm) {
+      return;
+    }
+    clearCourseFormError();
+    const rawName = ui.courseNameInput?.value || "";
+    const name = rawName.trim();
+    if (!name) {
+      showCourseFormError("Le nom du cours est obligatoire.");
+      if (ui.courseNameInput) {
+        ui.courseNameInput.focus();
+      }
+      return;
+    }
+    const rawImage = ui.courseImageInput?.value || "";
+    const imageUrl = rawImage ? sanitizeImageUrl(rawImage) : null;
+    if (rawImage && !imageUrl) {
+      showCourseFormError("L'URL de l'image doit commencer par http ou https.");
+      if (ui.courseImageInput) {
+        ui.courseImageInput.focus();
+      }
+      return;
+    }
+    setCourseFormLoading(true);
+    try {
+      const now = serverTimestamp();
+      const payload = {
+        title: name,
+        createdAt: now,
+        updatedAt: now,
+      };
+      if (imageUrl) {
+        payload.coverImageUrl = imageUrl;
+      }
+      const coursesRef = collection(db, "users", state.userId, "courses");
+      const docRef = await addDoc(coursesRef, payload);
+      state.pendingCourseSelectionId = docRef.id;
+      closeCourseForm();
+      showToast("Cours créé", "success");
+    } catch (error) {
+      if (isPermissionDenied(error)) {
+        showCourseFormError("Vous n'avez pas la permission de créer un cours.");
+      } else {
+        console.error("Impossible de créer le cours", error);
+        showCourseFormError("Impossible de créer le cours pour le moment.");
+      }
+    } finally {
+      setCourseFormLoading(false);
+    }
+  }
+
+  function createCourseCard(course) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "course-card";
+    card.dataset.courseId = course.id;
+    card.setAttribute("aria-label", `Ouvrir le cours ${course.title}`);
+    card.addEventListener("click", () => {
+      openCourse(course.id).catch((error) => {
+        console.error("Impossible d'ouvrir le cours", error);
+        showToast("Impossible d'ouvrir ce cours", "error");
+      });
+    });
+    card.setAttribute("role", "listitem");
+
+    const cover = document.createElement("div");
+    cover.className = "course-card-cover";
+    cover.setAttribute("aria-hidden", "true");
+
+    const initial = course.title?.trim()?.charAt(0)?.toUpperCase() || "C";
+    const initialElement = document.createElement("span");
+    initialElement.className = "course-card-cover__initial";
+    initialElement.textContent = initial;
+
+    if (course.coverUrl) {
+      cover.classList.add("course-card-cover--with-image");
+      const image = document.createElement("img");
+      image.className = "course-card-cover__image";
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.alt = "";
+      image.addEventListener("error", () => {
+        cover.classList.remove("course-card-cover--with-image");
+        image.remove();
+      });
+      image.src = course.coverUrl;
+      cover.appendChild(image);
+    }
+
+    cover.appendChild(initialElement);
+
+    const title = document.createElement("h3");
+    title.className = "course-card-title";
+    title.textContent = course.title;
+
+    const meta = document.createElement("p");
+    meta.className = "course-card-meta";
+    const noteCount = state.courseNoteCounts.get(course.id) || 0;
+    meta.textContent = formatCourseNoteCount(noteCount);
+
+    card.appendChild(cover);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    if (state.hasSelectedCourse && !state.isViewingUnassignedCourse && state.currentCourseId === course.id) {
+      card.classList.add("course-card--active");
+    }
+
+    return card;
+  }
+
+  function createNewCourseCard() {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "course-card course-card--new";
+    card.setAttribute("aria-label", "Créer un nouveau cours");
+    card.addEventListener("click", () => {
+      openCourseForm();
+    });
+    card.setAttribute("role", "listitem");
+
+    const cover = document.createElement("div");
+    cover.className = "course-card-cover";
+    cover.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.className = "course-card-cover__initial";
+    label.textContent = "+";
+    cover.appendChild(label);
+
+    const title = document.createElement("p");
+    title.className = "course-card-title";
+    title.textContent = "Nouveau cours";
+
+    const meta = document.createElement("p");
+    meta.className = "course-card-meta";
+    meta.textContent = "Organisez vos fiches par thèmes.";
+
+    card.appendChild(cover);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    return card;
+  }
+
+  function createUnassignedCourseCard(count) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "course-card";
+    card.dataset.courseScope = COURSE_UNASSIGNED_KEY;
+    card.setAttribute("aria-label", "Ouvrir les fiches sans cours");
+    card.addEventListener("click", () => {
+      openUnassignedCourse().catch((error) => {
+        console.error("Impossible d'ouvrir les fiches sans cours", error);
+        showToast("Impossible d'ouvrir ces fiches", "error");
+      });
+    });
+    card.setAttribute("role", "listitem");
+
+    const cover = document.createElement("div");
+    cover.className = "course-card-cover";
+    cover.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.className = "course-card-cover__initial";
+    label.textContent = "∅";
+    cover.appendChild(label);
+
+    const title = document.createElement("h3");
+    title.className = "course-card-title";
+    title.textContent = "Fiches sans cours";
+
+    const meta = document.createElement("p");
+    meta.className = "course-card-meta";
+    meta.textContent = formatCourseNoteCount(count);
+
+    if (state.hasSelectedCourse && state.isViewingUnassignedCourse) {
+      card.classList.add("course-card--active");
+    }
+
+    card.appendChild(cover);
+    card.appendChild(title);
+    card.appendChild(meta);
+
+    return card;
+  }
+
+  function renderCourseList() {
+    if (!ui.courseGrid) {
+      return;
+    }
+    ui.courseGrid.innerHTML = "";
+    ui.courseGrid.setAttribute("role", "list");
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(createNewCourseCard());
+
+    const courses = Array.isArray(state.courses) ? [...state.courses] : [];
+    courses.forEach((course) => {
+      fragment.appendChild(createCourseCard(course));
+    });
+
+    const unassignedCount = state.courseNoteCounts.get(COURSE_UNASSIGNED_KEY) || 0;
+    if (unassignedCount > 0) {
+      fragment.appendChild(createUnassignedCourseCard(unassignedCount));
+    }
+
+    ui.courseGrid.appendChild(fragment);
+
+    if (courses.length === 0 && unassignedCount === 0) {
+      const helper = document.createElement("p");
+      helper.className = "course-grid__empty muted";
+      helper.textContent = "Créez votre premier cours pour regrouper vos fiches.";
+      ui.courseGrid.appendChild(helper);
+    }
+  }
+
+  function applyNotesFilter() {
+    const source = Array.isArray(state.allNotesFlat) ? state.allNotesFlat : [];
+    let filtered = [];
+    if (state.hasSelectedCourse) {
+      if (state.isViewingUnassignedCourse) {
+        filtered = source.filter((note) => !note.courseId);
+      } else if (state.currentCourseId) {
+        filtered = source.filter((note) => note.courseId === state.currentCourseId);
+      }
+    }
+    const { roots, byId } = buildNoteTree(filtered);
+    const nextCollapsed = new Set();
+    if (state.collapsedNoteIds instanceof Set) {
+      state.collapsedNoteIds.forEach((noteId) => {
+        const candidate = byId.get(noteId);
+        if (candidate && Array.isArray(candidate.children) && candidate.children.length) {
+          nextCollapsed.add(noteId);
+        }
+      });
+    }
+    state.collapsedNoteIds = nextCollapsed;
+    state.notes = roots;
+    state.notesById = byId;
+    renderNotes();
+    ensureCurrentSelection();
+    updateShareButtonState();
+  }
+
+  async function openCourse(courseId) {
+    if (!state.userId) {
+      return;
+    }
+    const trimmed = typeof courseId === "string" ? courseId.trim() : "";
+    if (!trimmed) {
+      return;
+    }
+    const course = state.coursesById.get(trimmed);
+    if (!course) {
+      showToast("Ce cours n'est plus disponible.", "info");
+      renderCourseList();
+      return;
+    }
+    try {
+      await flushPendingSave();
+    } catch (error) {
+      console.warn("Impossible de synchroniser la fiche avant le changement de cours", error);
+    }
+    if (state.share.isOpen) {
+      closeShareDialog();
+    }
+    state.currentCourseId = course.id;
+    state.currentCourse = course;
+    state.isViewingUnassignedCourse = false;
+    state.hasSelectedCourse = true;
+    state.pendingCourseSelectionId = null;
+    state.pendingSelectionId = null;
+    state.currentNoteId = null;
+    state.currentNote = null;
+    state.collapsedNoteIds = new Set();
+    state.hasUnsavedChanges = false;
+    updateBrandSubtitle(`Cours : ${course.title}`);
+    showView("workspace");
+    setNotesDrawer(false);
+    setSidebarCollapsed(false);
+    applyNotesFilter();
+    renderCourseList();
+  }
+
+  async function openUnassignedCourse() {
+    if (!state.userId) {
+      return;
+    }
+    try {
+      await flushPendingSave();
+    } catch (error) {
+      console.warn("Impossible de synchroniser la fiche avant l'ouverture des fiches sans cours", error);
+    }
+    if (state.share.isOpen) {
+      closeShareDialog();
+    }
+    state.currentCourseId = null;
+    state.currentCourse = null;
+    state.isViewingUnassignedCourse = true;
+    state.hasSelectedCourse = true;
+    state.pendingCourseSelectionId = null;
+    state.pendingSelectionId = null;
+    state.currentNoteId = null;
+    state.currentNote = null;
+    state.collapsedNoteIds = new Set();
+    state.hasUnsavedChanges = false;
+    updateBrandSubtitle("Fiches sans cours");
+    showView("workspace");
+    setNotesDrawer(false);
+    setSidebarCollapsed(false);
+    applyNotesFilter();
+    renderCourseList();
+  }
+
+  async function returnToCourseDashboard() {
+    if (!state.userId) {
+      showView("login");
+      return;
+    }
+    try {
+      await flushPendingSave();
+    } catch (error) {
+      console.warn("Impossible de synchroniser la fiche avant de quitter le cours", error);
+    }
+    if (state.share.isOpen) {
+      closeShareDialog();
+    }
+    setRevisionMode(false);
+    setNotesDrawer(false);
+    setSidebarCollapsed(false);
+    state.hasSelectedCourse = false;
+    state.isViewingUnassignedCourse = false;
+    state.currentCourseId = null;
+    state.currentCourse = null;
+    state.pendingCourseSelectionId = null;
+    state.pendingSelectionId = null;
+    state.currentNoteId = null;
+    state.currentNote = null;
+    state.collapsedNoteIds = new Set();
+    state.hasUnsavedChanges = false;
+    updateBrandSubtitle();
+    applyNotesFilter();
+    renderCourseList();
+    showView("courses");
+  }
+
+
   function showView(name) {
     setTextColorPopover(false);
+    if (bodyElement) {
+      if (typeof name === "string" && name.length) {
+        bodyElement.setAttribute("data-view", name);
+      } else {
+        bodyElement.removeAttribute("data-view");
+      }
+    }
     Object.entries(views).forEach(([key, section]) => {
       if (!section) return;
       section.classList.toggle("active", key === name);
       section.classList.toggle("hidden", key !== name);
     });
+    if (headerElement && name !== "workspace") {
+      headerElement.classList.add("toolbar-hidden");
+    }
   }
 
   function showToast(message, type = "info") {
@@ -2698,6 +3179,9 @@ function bootstrapApp() {
     updateFontSizeDisplay();
     updateSaveStatus();
     updateShareButtonState();
+    if (headerElement && !state.isRevisionMode) {
+      headerElement.classList.add("toolbar-hidden");
+    }
   }
 
   function applyCurrentNoteToEditor(options = {}) {
@@ -2705,6 +3189,9 @@ function bootstrapApp() {
     if (!state.currentNote) {
       showEmptyEditor();
       return;
+    }
+    if (headerElement && !state.isRevisionMode) {
+      headerElement.classList.remove("toolbar-hidden");
     }
     hideClozeFeedback();
     deselectEditorImage();
@@ -2850,7 +3337,13 @@ function bootstrapApp() {
       ui.notesContainer.removeAttribute("role");
       const empty = document.createElement("p");
       empty.className = "muted small";
-      empty.textContent = "Aucune fiche pour le moment. Ajoutez-en une pour commencer.";
+      let message = "Aucune fiche pour le moment. Ajoutez-en une pour commencer.";
+      if (!state.hasSelectedCourse) {
+        message = "Sélectionnez un cours pour afficher vos fiches.";
+      } else if (state.isViewingUnassignedCourse) {
+        message = "Il n'y a pas encore de fiche sans cours.";
+      }
+      empty.textContent = message;
       ui.notesContainer.appendChild(empty);
       return;
     }
@@ -3096,25 +3589,103 @@ function bootstrapApp() {
             ? data.parentId.trim()
             : null,
         position,
+        courseId:
+          typeof data.courseId === "string" && data.courseId.trim() !== ""
+            ? data.courseId.trim()
+            : null,
       };
     });
 
-    const { roots, byId } = buildNoteTree(flatNotes);
-    const nextCollapsed = new Set();
-    if (state.collapsedNoteIds instanceof Set) {
-      state.collapsedNoteIds.forEach((noteId) => {
-        const candidate = byId.get(noteId);
-        if (candidate && Array.isArray(candidate.children) && candidate.children.length) {
-          nextCollapsed.add(noteId);
-        }
-      });
-    }
-    state.collapsedNoteIds = nextCollapsed;
-    state.notes = roots;
-    state.notesById = byId;
+    state.allNotesFlat = flatNotes;
+    const counts = new Map();
+    flatNotes.forEach((note) => {
+      const key = note.courseId || COURSE_UNASSIGNED_KEY;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    state.courseNoteCounts = counts;
 
-    renderNotes();
-    ensureCurrentSelection();
+    applyNotesFilter();
+    renderCourseList();
+  }
+
+  function updateCoursesFromSnapshot(snapshot) {
+    const courses = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() || {};
+      const resolveTitle = () => {
+        if (typeof data.title === "string" && data.title.trim() !== "") {
+          return data.title.trim();
+        }
+        if (typeof data.name === "string" && data.name.trim() !== "") {
+          return data.name.trim();
+        }
+        return "Cours sans titre";
+      };
+      const toDate = (value) => (value && typeof value.toDate === "function" ? value.toDate() : null);
+      const createdAt = toDate(data.createdAt);
+      const updatedAt = toDate(data.updatedAt) || createdAt;
+      const coverUrl = sanitizeImageUrl(data.coverImageUrl || data.coverUrl || "");
+      return {
+        id: docSnap.id,
+        title: resolveTitle(),
+        coverUrl,
+        createdAt,
+        updatedAt,
+      };
+    });
+
+    courses.sort((a, b) => {
+      const updatedA = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+      const updatedB = b.updatedAt instanceof Date ? b.updatedAt.getTime() : 0;
+      if (updatedA !== updatedB) {
+        return updatedB - updatedA;
+      }
+      return a.title.localeCompare(b.title);
+    });
+
+    state.courses = courses;
+    state.coursesById = new Map(courses.map((course) => [course.id, course]));
+
+    renderCourseList();
+
+    if (state.pendingCourseSelectionId) {
+      const pendingCourse = state.coursesById.get(state.pendingCourseSelectionId);
+      if (pendingCourse) {
+        state.pendingCourseSelectionId = null;
+        openCourse(pendingCourse.id).catch((error) => {
+          console.error("Impossible d'ouvrir le cours créé", error);
+        });
+        return;
+      }
+    }
+
+    if (!state.hasSelectedCourse) {
+      updateBrandSubtitle();
+      return;
+    }
+
+    if (state.isViewingUnassignedCourse) {
+      updateBrandSubtitle("Fiches sans cours");
+      return;
+    }
+
+    if (!state.currentCourseId) {
+      Promise.resolve(returnToCourseDashboard()).catch((error) => {
+        console.error("Impossible de revenir à la liste des cours", error);
+      });
+      return;
+    }
+
+    const activeCourse = state.coursesById.get(state.currentCourseId);
+    if (!activeCourse) {
+      showToast("Ce cours n'est plus disponible.", "info");
+      Promise.resolve(returnToCourseDashboard()).catch((error) => {
+        console.error("Impossible de revenir à la liste des cours", error);
+      });
+      return;
+    }
+
+    state.currentCourse = activeCourse;
+    updateBrandSubtitle(`Cours : ${activeCourse.title}`);
   }
 
   function sanitizeNoteForEditing(note) {
@@ -4687,7 +5258,19 @@ function bootstrapApp() {
 
   async function createNote(parentId = null) {
     if (!state.userId) return;
+    if (!state.hasSelectedCourse) {
+      showToast("Sélectionnez un cours avant de créer une fiche.", "info");
+      return;
+    }
     const safeParentId = typeof parentId === "string" && parentId.trim() !== "" ? parentId.trim() : null;
+    let courseIdForNote = null;
+    if (!state.isViewingUnassignedCourse) {
+      if (!state.currentCourseId) {
+        showToast("Sélectionnez un cours avant de créer une fiche.", "info");
+        return;
+      }
+      courseIdForNote = state.currentCourseId;
+    }
     try {
       const notesRef = collection(db, "users", state.userId, "notes");
       const timestamp = serverTimestamp();
@@ -4702,6 +5285,11 @@ function bootstrapApp() {
         parentId: safeParentId,
         position: getNextSiblingPosition(safeParentId),
       };
+      if (courseIdForNote) {
+        payload.courseId = courseIdForNote;
+      } else if (state.isViewingUnassignedCourse) {
+        payload.courseId = null;
+      }
       const docRef = await addDoc(notesRef, payload);
       if (safeParentId) {
         state.collapsedNoteIds.delete(safeParentId);
@@ -5000,10 +5588,36 @@ function bootstrapApp() {
     );
   }
 
+  function subscribeToCourses() {
+    if (!state.userId) return;
+    const ref = collection(db, "users", state.userId, "courses");
+    if (state.coursesUnsubscribe) {
+      state.coursesUnsubscribe();
+    }
+    state.coursesUnsubscribe = onSnapshot(
+      ref,
+      (snapshot) => {
+        updateCoursesFromSnapshot(snapshot);
+      },
+      (error) => {
+        if (isPermissionDenied(error)) {
+          reportPermissionIssue("Lecture des cours refusée par Firestore");
+        } else {
+          console.error("Erreur lors du chargement des cours", error);
+          showToast("Impossible de charger vos cours", "error");
+        }
+      }
+    );
+  }
+
   function resetState() {
     if (state.notesUnsubscribe) {
       state.notesUnsubscribe();
       state.notesUnsubscribe = null;
+    }
+    if (state.coursesUnsubscribe) {
+      state.coursesUnsubscribe();
+      state.coursesUnsubscribe = null;
     }
     if (state.pendingSave) {
       clearTimeout(state.pendingSave);
@@ -5019,13 +5633,25 @@ function bootstrapApp() {
     state.collapsedNoteIds = new Set();
     state.currentNoteId = null;
     state.currentNote = null;
+    state.courses = [];
+    state.coursesById = new Map();
+    state.currentCourseId = null;
+    state.currentCourse = null;
+    state.isViewingUnassignedCourse = false;
+    state.hasSelectedCourse = false;
+    state.courseNoteCounts = new Map();
+    state.allNotesFlat = [];
     state.pendingSelectionId = null;
+    state.pendingCourseSelectionId = null;
     state.hasUnsavedChanges = false;
     state.lastSavedAt = null;
     state.pendingRemoteNote = null;
     state.isEditorFocused = false;
     ui.notesContainer.innerHTML = "";
     showEmptyEditor();
+    renderCourseList();
+    updateBrandSubtitle();
+    closeCourseForm();
     renderShareDialog();
     ui.currentUser.textContent = "";
     ui.logoutBtn.disabled = true;
@@ -5089,8 +5715,11 @@ function bootstrapApp() {
       ui.resetForm.reset();
     }
     clearAuthMessages();
+    subscribeToCourses();
     subscribeToNotes();
-    showView("workspace");
+    renderCourseList();
+    updateBrandSubtitle();
+    showView("courses");
   }
 
   async function logout() {
@@ -5162,6 +5791,13 @@ function bootstrapApp() {
       ui.resetForm.addEventListener("submit", handleResetSubmit);
     }
     ui.logoutBtn.addEventListener("click", logout);
+    if (ui.backToCoursesBtn) {
+      ui.backToCoursesBtn.addEventListener("click", () => {
+        Promise.resolve(returnToCourseDashboard()).catch((error) => {
+          console.error("Impossible de revenir à la liste des cours", error);
+        });
+      });
+    }
     ui.addNoteBtn.addEventListener("click", () => {
       createNote().catch((error) => {
         console.error(error);
@@ -5243,6 +5879,36 @@ function bootstrapApp() {
     if (ui.shareDialog) {
       ui.shareDialog.addEventListener("click", handleShareDialogClick);
       ui.shareDialog.addEventListener("change", handleShareDialogChange);
+    }
+    if (ui.courseForm) {
+      ui.courseForm.addEventListener("submit", handleCourseFormSubmit);
+      ui.courseForm.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCourseForm();
+        }
+      });
+    }
+    if (ui.courseFormCancel) {
+      ui.courseFormCancel.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeCourseForm();
+      });
+    }
+    if (ui.courseFormClose) {
+      ui.courseFormClose.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeCourseForm();
+      });
+    }
+    if (ui.courseFormOverlay) {
+      ui.courseFormOverlay.addEventListener("click", handleCourseOverlayClick);
+      ui.courseFormOverlay.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCourseForm();
+        }
+      });
     }
     if (ui.shareSearchInput) {
       ui.shareSearchInput.addEventListener("input", handleShareSearchInput);
