@@ -124,6 +124,36 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if false;
 
+      function isValidCourseData(data) {
+        return hasOnlyFields(data, [
+            'title',
+            'name',
+            'coverImageUrl',
+            'coverUrl',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          isOptionalString(data.title) &&
+          isOptionalString(data.name) &&
+          isOptionalString(data.coverImageUrl) &&
+          isOptionalString(data.coverUrl) &&
+          isOptionalTimestamp(data.createdAt) &&
+          isOptionalTimestamp(data.updatedAt);
+      }
+
+      function isValidCourseCreate(data) {
+        return isValidCourseData(data) &&
+          data.createdAt is timestamp &&
+          data.updatedAt is timestamp &&
+          ((data.title is string && data.title.size() > 0) ||
+            (data.name is string && data.name.size() > 0));
+      }
+
+      function isValidCourseUpdate(newData, currentData) {
+        return isValidCourseData(newData) &&
+          newData.createdAt == currentData.createdAt;
+      }
+
       match /notes/{noteId} {
         allow create: if isOwner(userId) &&
           isValidNoteData(request.resource.data, userId);
@@ -143,6 +173,19 @@ service cloud.firestore {
             membersUnchanged(request.resource.data, resource.data) &&
             request.resource.data.published == resource.data.published)
         );
+
+        allow delete: if resource != null && (isOwner(userId) || isAdmin());
+      }
+
+      match /courses/{courseId} {
+        allow create: if isOwner(userId) &&
+          isValidCourseCreate(request.resource.data);
+
+        allow read: if resource != null && (isOwner(userId) || isAdmin());
+
+        allow update: if resource != null &&
+          (isOwner(userId) || isAdmin()) &&
+          isValidCourseUpdate(request.resource.data, resource.data);
 
         allow delete: if resource != null && (isOwner(userId) || isAdmin());
       }
