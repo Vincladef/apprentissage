@@ -822,11 +822,19 @@ function bootstrapApp() {
     setCourseFormLoading(true);
     try {
       const now = serverTimestamp();
+      const ownerEmail =
+        typeof state.userEmail === "string" && state.userEmail.trim() !== ""
+          ? state.userEmail.trim()
+          : null;
       const payload = {
         title: name,
         createdAt: now,
         updatedAt: now,
+        ownerUid: state.userId,
       };
+      if (ownerEmail) {
+        payload.ownerEmail = ownerEmail;
+      }
       if (imageUrl) {
         payload.coverImageUrl = imageUrl;
       }

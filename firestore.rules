@@ -124,34 +124,41 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if false;
 
-      function isValidCourseData(data) {
+      function isValidCourseData(data, userId) {
         return hasOnlyFields(data, [
             'title',
             'name',
             'coverImageUrl',
             'coverUrl',
             'createdAt',
-            'updatedAt'
+            'updatedAt',
+            'ownerUid',
+            'ownerEmail'
           ]) &&
           isOptionalString(data.title) &&
           isOptionalString(data.name) &&
           isOptionalString(data.coverImageUrl) &&
           isOptionalString(data.coverUrl) &&
           isOptionalTimestamp(data.createdAt) &&
-          isOptionalTimestamp(data.updatedAt);
+          isOptionalTimestamp(data.updatedAt) &&
+          data.ownerUid is string &&
+          data.ownerUid == userId &&
+          isOptionalString(data.ownerEmail);
       }
 
-      function isValidCourseCreate(data) {
-        return isValidCourseData(data) &&
+      function isValidCourseCreate(data, userId) {
+        return isValidCourseData(data, userId) &&
           data.createdAt is timestamp &&
           data.updatedAt is timestamp &&
           ((data.title is string && data.title.size() > 0) ||
             (data.name is string && data.name.size() > 0));
       }
 
-      function isValidCourseUpdate(newData, currentData) {
-        return isValidCourseData(newData) &&
-          newData.createdAt == currentData.createdAt;
+      function isValidCourseUpdate(newData, currentData, userId) {
+        return isValidCourseData(newData, userId) &&
+          newData.createdAt == currentData.createdAt &&
+          newData.ownerUid == currentData.ownerUid &&
+          newData.ownerEmail == currentData.ownerEmail;
       }
 
       match /notes/{noteId} {
@@ -179,13 +186,13 @@ service cloud.firestore {
 
       match /courses/{courseId} {
         allow create: if isOwner(userId) &&
-          isValidCourseCreate(request.resource.data);
+          isValidCourseCreate(request.resource.data, userId);
 
         allow read: if resource != null && (isOwner(userId) || isAdmin());
 
         allow update: if resource != null &&
           (isOwner(userId) || isAdmin()) &&
-          isValidCourseUpdate(request.resource.data, resource.data);
+          isValidCourseUpdate(request.resource.data, resource.data, userId);
 
         allow delete: if resource != null && (isOwner(userId) || isAdmin());
       }
